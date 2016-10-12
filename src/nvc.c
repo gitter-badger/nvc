@@ -162,28 +162,21 @@ static int analyse(int argc, char **argv)
    for (int i = 0; i < n_units; i++) {
       simplify(units[i]);
       bounds_check(units[i]);
-      lower_unit(units[i]);
    }
 
    if (parse_errors() + sem_errors() + bounds_errors() > 0)
       return EXIT_FAILURE;
 
-   for (int i = 0; i < n_units; i++) {
-      tree_kind_t kind = tree_kind(units[i]);
-      const bool need_cgen =
-         (kind == T_PACK_BODY)
-         || ((kind == T_PACKAGE) && pack_needs_cgen(units[i]));
-      if (!need_cgen)
-         units[i] = NULL;
-   }
-
    lib_save(lib_work());
 
    for (int i = 0; i < n_units; i++) {
-      if (units[i] != NULL) {
-         lower_unit(units[i]);
+      lower_unit(units[i]);
+
+      const tree_kind_t kind = tree_kind(units[i]);
+      const bool need_cgen = kind == T_PACK_BODY
+         || (kind == T_PACKAGE && pack_needs_cgen(units[i]));
+      if (need_cgen)
          cgen(units[i]);
-      }
    }
 
    argc -= next_cmd - 1;
