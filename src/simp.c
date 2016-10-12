@@ -122,6 +122,7 @@ static tree_t simp_fcall(tree_t t, simp_ctx_t *ctx)
       ident_until(name, '.') == name
       || ident_runtil(name, '.') == ctx->prefix;
 
+   // XXX: is this still required?
    if (tree_kind(decl) == T_FUNC_DECL && !builtin && local) {
       // Try searching the current unit for the function body
       type_t type = tree_type(decl);
@@ -135,7 +136,8 @@ static tree_t simp_fcall(tree_t t, simp_ctx_t *ctx)
       }
    }
 
-   return eval(simp_call_args(t), EVAL_FCALL);
+   tree_t new = simp_call_args(t);
+   return builtin ? eval(new, 0) : new;
 }
 
 static tree_t simp_pcall(tree_t t)

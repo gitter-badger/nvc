@@ -284,6 +284,9 @@ START_TEST(test_ffold)
                                        T_ENTITY, T_ARCH);
    fail_unless(sem_errors() == 0);
 
+   lower_unit(a);
+   fold(a);
+
    fail_unless(folded_i(tree_value(tree_decl(a, 6)), 6));
    fail_unless(folded_i(tree_value(tree_decl(a, 8)), 4));
    fail_unless(folded_i(tree_value(tree_decl(a, 9)), 3));

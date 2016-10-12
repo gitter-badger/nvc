@@ -918,3 +918,16 @@ tree_t eval(tree_t fcall, eval_flags_t flags)
       fatal_trace("eval result is not scalar");
    }
 }
+
+static tree_t fold_tree_fn(tree_t t, void *context)
+{
+   if (tree_kind(t) == T_FCALL)
+      return eval(t, EVAL_LOWER | EVAL_FCALL);
+   else
+      return t;
+}
+
+void fold(tree_t top)
+{
+   tree_rewrite(top, fold_tree_fn, NULL);
+}

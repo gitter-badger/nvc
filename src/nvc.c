@@ -162,6 +162,7 @@ static int analyse(int argc, char **argv)
    for (int i = 0; i < n_units; i++) {
       simplify(units[i]);
       bounds_check(units[i]);
+      lower_unit(units[i]);
    }
 
    if (parse_errors() + sem_errors() + bounds_errors() > 0)

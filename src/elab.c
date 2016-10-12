@@ -1007,7 +1007,7 @@ static void elab_instance(tree_t t, const elab_ctx_t *ctx)
    elab_decls(entity, &new_ctx);
 
    elab_funcs(arch, entity, ctx);
-   simplify(arch);
+   fold(arch);
 
    elab_map_nets(maps);
 
@@ -1180,7 +1180,7 @@ static void elab_for_generate(tree_t t, elab_ctx_t *ctx)
          .count   = 1
       };
       tree_rewrite(copy, rewrite_refs, &params);
-      simplify(copy);
+      fold(copy);
 
       ident_t npath = hpathf(ctx->path, '\0', "[%"PRIi64"]", i);
       ident_t ninst = hpathf(ctx->inst, '\0', "[%"PRIi64"]", i);
@@ -1436,7 +1436,7 @@ static void elab_entity_arch(tree_t t, tree_t arch, const elab_ctx_t *ctx)
    tree_add_attr_str(ctx->out, simple_name_i, npath);
 
    elab_funcs(arch, t, ctx);
-   simplify(arch);
+   fold(arch);
    bounds_check(arch);
 
    elab_ctx_t new_ctx = {

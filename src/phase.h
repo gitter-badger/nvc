@@ -36,6 +36,9 @@ bool sem_check(tree_t t);
 int sem_errors(void);
 
 // Fold all constant expressions
+void fold(tree_t top);
+
+// Rewrite to simpler forms
 void simplify(tree_t top);
 
 // Perform static bounds checking
