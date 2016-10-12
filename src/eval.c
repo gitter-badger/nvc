@@ -949,10 +949,34 @@ tree_t eval(tree_t fcall, eval_flags_t flags)
 
 static tree_t fold_tree_fn(tree_t t, void *context)
 {
-   if (tree_kind(t) == T_FCALL)
+   switch (tree_kind(t)) {
+   case T_FCALL:
       return eval(t, EVAL_LOWER | EVAL_FCALL);
-   else
+
+   case T_REF:
+      {
+         tree_t decl = tree_ref(t);
+         switch (tree_kind(decl)) {
+         case T_CONST_DECL:
+            {
+               tree_t value = tree_value(decl);
+               if (tree_kind(value) == T_LITERAL)
+                  return value;
+               else
+                  return t;
+            }
+
+         case T_UNIT_DECL:
+            return tree_value(decl);
+
+         default:
+            return t;
+         }
+      }
+
+   default:
       return t;
+   }
 }
 
 void fold(tree_t top)
