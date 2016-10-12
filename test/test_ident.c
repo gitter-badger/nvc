@@ -244,6 +244,17 @@ START_TEST(test_interned)
 }
 END_TEST
 
+START_TEST(test_contains)
+{
+   ident_t i = ident_new("cake");
+   fail_unless(ident_contains(i, "k"));
+   fail_unless(ident_contains(i, "moa"));
+   fail_unless(ident_contains(i, "amo"));
+   fail_if(ident_contains(i, "zod"));
+   fail_if(ident_contains(i, ""));
+}
+END_TEST
+
 int main(void)
 {
    srandom((unsigned)time(NULL));
@@ -266,6 +277,7 @@ int main(void)
    tcase_add_test(tc_core, test_rfrom);
    tcase_add_test(tc_core, test_from);
    tcase_add_test(tc_core, test_interned);
+   tcase_add_test(tc_core, test_contains);
    suite_add_tcase(s, tc_core);
 
    SRunner *sr = srunner_create(s);

@@ -468,6 +468,20 @@ bool ident_glob(ident_t i, const char *glob, int length)
    return ident_glob_walk(i, glob + length - 1, glob);
 }
 
+bool ident_contains(ident_t i, const char *search)
+{
+   assert(i != NULL);
+
+   for (ident_t r = i; r->value != '\0'; r = r->up) {
+      for (const char *p = search; *p != '\0'; p++) {
+         if (r->value == *p)
+            return true;
+      }
+   }
+
+   return false;
+}
+
 void ident_list_add(ident_list_t **list, ident_t i)
 {
    ident_list_t *c = xmalloc(sizeof(ident_list_t));

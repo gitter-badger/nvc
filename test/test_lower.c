@@ -815,9 +815,9 @@ START_TEST(test_func1)
    EXPECT_BB(1) = {
       { VCODE_OP_CONST, .value = 2 },
 #if LLVM_MANGLES_NAMES
-      { VCODE_OP_FCALL, .func = ":func1:add1__II", .args = 1 },
+      { VCODE_OP_FCALL, .func = "WORK.FUNC1-TEST.ADD1__II", .args = 1 },
 #else
-      { VCODE_OP_FCALL, .func = ":func1:add1$II", .args = 1 },
+      { VCODE_OP_FCALL, .func = "WORK.FUNC1-TEST.ADD1$II", .args = 1 },
 #endif
       { VCODE_OP_STORE, .name = "R" },
       { VCODE_OP_WAIT, .target = 2 }
@@ -1324,9 +1324,9 @@ START_TEST(test_proc1)
          { VCODE_OP_LOAD, .name = "A" },
          { VCODE_OP_INDEX, .name = "B" },
 #if LLVM_MANGLES_NAMES
-         { VCODE_OP_FCALL, .func = ":proc1:add1__vII", .args = 2 },
+         { VCODE_OP_FCALL, .func = "WORK.PROC1-TEST.ADD1__vII", .args = 2 },
 #else
-         { VCODE_OP_FCALL, .func = ":proc1:add1$vII", .args = 2 },
+         { VCODE_OP_FCALL, .func = "WORK.PROC1-TEST.ADD1$vII", .args = 2 },
 #endif
          { VCODE_OP_CONST, .value = 2 },
          { VCODE_OP_LOAD, .name = "B" },
@@ -1335,9 +1335,9 @@ START_TEST(test_proc1)
          { VCODE_OP_ASSERT },
          { VCODE_OP_CONST, .value = 5 },
 #if LLVM_MANGLES_NAMES
-         { VCODE_OP_FCALL, .func = ":proc1:add1__vII", .args = 2 },
+         { VCODE_OP_FCALL, .func = "WORK.PROC1-TEST.ADD1__vII", .args = 2 },
 #else
-         { VCODE_OP_FCALL, .func = ":proc1:add1$vII", .args = 2 },
+         { VCODE_OP_FCALL, .func = "WORK.PROC1-TEST.ADD1$vII", .args = 2 },
 #endif
          { VCODE_OP_LOAD, .name = "B" },
          { VCODE_OP_CONST, .value = 6 },
@@ -1484,9 +1484,10 @@ START_TEST(test_proc3)
       EXPECT_BB(1) = {
          { VCODE_OP_INDEX, .name = "X" },
 #if LLVM_MANGLES_NAMES
-         { VCODE_OP_PCALL, .func = ":proc3:p1__vI", .target = 2, .args = 1 },
+         { VCODE_OP_PCALL, .func = "WORK.PROC3-TEST.P1__vI",
+           .target = 2, .args = 1 },
 #else
-         { VCODE_OP_PCALL, .func = ":proc3:p1$vI", .target = 2, .args = 1 }
+         { VCODE_OP_PCALL, .func = "WORK.PROC3-TEST.P1$vI", .target = 2, .args = 1 }
 #endif
       };
 
@@ -1494,9 +1495,9 @@ START_TEST(test_proc3)
 
       EXPECT_BB(2) = {
 #if LLVM_MANGLES_NAMES
-         { VCODE_OP_RESUME, .func = ":proc3:p1__vI" },
+         { VCODE_OP_RESUME, .func = "WORK.PROC3-TEST.P1__vI" },
 #else
-         { VCODE_OP_RESUME, .func = ":proc3:p1$vI" },
+         { VCODE_OP_RESUME, .func = "WORK.PROC3-TEST.P1$vI" },
 #endif
          { VCODE_OP_WAIT, .target = 3 }
       };
@@ -1712,17 +1713,17 @@ START_TEST(test_func5)
          { VCODE_OP_CONST, .value = 2 },
          { VCODE_OP_NETS, .name = ":func5:x" },
 #if LLVM_MANGLES_NAMES
-         { VCODE_OP_FCALL, .func = ":func5:add_one_s__IsI", .args = 1 },
+         { VCODE_OP_FCALL, .func = "WORK.FUNC5-TEST.ADD_ONE_S__IsI", .args = 1 },
 #else
-         { VCODE_OP_FCALL, .func = ":func5:add_one_s$IsI", .args = 1 },
+         { VCODE_OP_FCALL, .func = "WORK.FUNC5-TEST.ADD_ONE_S$IsI", .args = 1 },
 #endif
          { VCODE_OP_CONST, .value = 6 },
          { VCODE_OP_CMP, .cmp = VCODE_CMP_EQ },
          { VCODE_OP_ASSERT },
 #if LLVM_MANGLES_NAMES
-         { VCODE_OP_FCALL, .func = ":func5:event__BsI", .args = 1 },
+         { VCODE_OP_FCALL, .func = "WORK.FUNC5-TEST.EVENT__BsI", .args = 1 },
 #else
-         { VCODE_OP_FCALL, .func = ":func5:event$BsI", .args = 1 },
+         { VCODE_OP_FCALL, .func = "WORK.FUNC5-TEST.EVENT$BsI", .args = 1 },
 #endif
          { VCODE_OP_ASSERT },
          { VCODE_OP_WAIT, .target = 2 }
@@ -1979,9 +1980,11 @@ START_TEST(test_issue122)
 
    EXPECT_BB(0) = {
 #if LLVM_MANGLES_NAMES
-      { VCODE_OP_NESTED_FCALL, .func = ":issue122:func__II__NESTED__I" },
+      { VCODE_OP_NESTED_FCALL,
+        .func = "WORK.ISSUE122-TEST.FUNC__NESTED__II__NESTED__I" },
 #else
-      { VCODE_OP_NESTED_FCALL, .func = ":issue122:func$II__NESTED$I" },
+      { VCODE_OP_NESTED_FCALL,
+        .func = "WORK.ISSUE122-TEST.FUNC$II__NESTED$I" },
 #endif
       { VCODE_OP_STORE, .name = "V" },
       { VCODE_OP_RETURN }
