@@ -532,6 +532,30 @@ static void eval_op_bounds(int op, eval_state_t *state)
    }
 }
 
+static void eval_op_dynamic_bounds(int op, eval_state_t *state)
+{
+   value_t *reg = eval_get_reg(vcode_get_arg(op, 0), state);
+   value_t *low = eval_get_reg(vcode_get_arg(op, 1), state);
+   value_t *high = eval_get_reg(vcode_get_arg(op, 2), state);
+
+   switch (reg->kind) {
+   case VALUE_INTEGER:
+      {
+         if (low->integer > high->integer)
+            break;
+         else if (reg->integer < low->integer || reg->integer > high->integer)
+            state->failed = true;
+      }
+      break;
+
+   case VALUE_REAL:
+      break;
+
+   default:
+      fatal_trace("invalid value type in %s", __func__);
+   }
+}
+
 static void eval_op_const_array(int op, eval_state_t *state)
 {
    value_t *dst = eval_get_reg(vcode_get_result(op), state);
@@ -846,6 +870,10 @@ static void eval_vcode(eval_state_t *state)
 
       case VCODE_OP_REM:
          eval_op_rem(i, state);
+         break;
+
+      case VCODE_OP_DYNAMIC_BOUNDS:
+         eval_op_dynamic_bounds(i, state);
          break;
 
       default:
