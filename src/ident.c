@@ -1,5 +1,5 @@
 //
-//  Copyright (C) 2011-2014  Nick Gasson
+//  Copyright (C) 2011-2016  Nick Gasson
 //
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
@@ -386,10 +386,9 @@ ident_t ident_runtil(ident_t i, char c)
 {
    assert(i != NULL);
 
-   while (i->value != '\0') {
-      if (i->value == c)
-         return i->up;
-      i = i->up;
+   for (ident_t r = i; r->value != '\0'; r = r->up) {
+      if (r->value == c)
+         return r->up;
    }
 
    return i;

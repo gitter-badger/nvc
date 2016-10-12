@@ -1,5 +1,5 @@
 //
-//  Copyright (C) 2014-2015  Nick Gasson
+//  Copyright (C) 2014-2016  Nick Gasson
 //
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
@@ -18,6 +18,7 @@
 #include "util.h"
 #include "vcode.h"
 #include "array.h"
+#include "hash.h"
 
 #include <assert.h>
 #include <inttypes.h>
@@ -35,20 +36,21 @@ typedef struct {
    vcode_type_t        type;
    vcode_block_array_t targets;
    vcode_var_t         address;
-   uint32_t            index;
+   vcode_bookmark_t    bookmark;   // TODO: move into union
    ident_t             func;
    unsigned            subkind;
    union {
-      vcode_cmp_t     cmp;
-      int64_t         value;
-      double          real;
-      char           *comment;
-      vcode_signal_t  signal;
-      unsigned        dim;
-      unsigned        hops;
-      unsigned        field;
-      unsigned        elems;
-      uint32_t        hint;
+      vcode_cmp_t      cmp;
+      int64_t          value;
+      double           real;
+      char            *comment;
+      vcode_signal_t   signal;
+      unsigned         dim;
+      unsigned         hops;
+      unsigned         field;
+      unsigned         elems;
+      vcode_bookmark_t hint;
+      uint32_t         tag;
    };
 } op_t;
 
@@ -155,6 +157,7 @@ struct vcode_unit {
 
 static vcode_unit_t  active_unit = NULL;
 static vcode_block_t active_block = VCODE_INVALID_BLOCK;
+static hash_t       *registry = NULL;
 
 static inline int64_t sadd64(int64_t a, int64_t b)
 {
@@ -523,6 +526,8 @@ void vcode_opt(void)
             case VCODE_OP_WRAP:
             case VCODE_OP_VEC_LOAD:
             case VCODE_OP_HEAP_SAVE:
+            case VCODE_OP_EXP:
+            case VCODE_OP_UNDEFINED:
                if (uses[o->result] == -1) {
                   vcode_dump();
                   fatal("defintion of r%d does not dominate all uses",
@@ -764,7 +769,8 @@ vcode_var_t vcode_get_type(int op)
    op_t *o = vcode_op_data(op);
    assert(o->kind == VCODE_OP_BOUNDS || o->kind == VCODE_OP_ALLOCA
           || o->kind == VCODE_OP_COPY || o->kind == VCODE_OP_SET_INITIAL
-          || o->kind == VCODE_OP_INDEX_CHECK);
+          || o->kind == VCODE_OP_INDEX_CHECK || o->kind == VCODE_OP_CONST
+          || o->kind == VCODE_OP_CAST);
    return o->type;
 }
 
@@ -792,6 +798,13 @@ vcode_cmp_t vcode_get_cmp(int op)
    return o->cmp;
 }
 
+uint32_t vcode_get_tag(int op)
+{
+   op_t *o = vcode_op_data(op);
+   assert(o->kind == VCODE_OP_COVER_STMT || o->kind == VCODE_OP_COVER_COND);
+   return o->tag;
+}
+
 uint32_t vcode_get_index(int op)
 {
    op_t *o = vcode_op_data(op);
@@ -800,9 +813,8 @@ uint32_t vcode_get_index(int op)
           || o->kind == VCODE_OP_DIV || o->kind == VCODE_OP_NULL_CHECK
           || o->kind == VCODE_OP_VALUE || o->kind == VCODE_OP_BOUNDS
           || o->kind == VCODE_OP_DYNAMIC_BOUNDS
-          || o->kind == VCODE_OP_ARRAY_SIZE || o->kind == VCODE_OP_INDEX_CHECK
-          || o->kind == VCODE_OP_COVER_STMT || o->kind == VCODE_OP_COVER_COND);
-   return o->index;
+          || o->kind == VCODE_OP_ARRAY_SIZE || o->kind == VCODE_OP_INDEX_CHECK);
+   return o->bookmark.index;
 }
 
 uint32_t vcode_get_hint(int op)
@@ -811,7 +823,7 @@ uint32_t vcode_get_hint(int op)
    assert(o->kind == VCODE_OP_BOUNDS
           || o->kind == VCODE_OP_DYNAMIC_BOUNDS
           || o->kind == VCODE_OP_INDEX_CHECK);
-   return o->hint;
+   return o->hint.index;
 }
 
 vcode_block_t vcode_get_target(int op, int nth)
@@ -864,7 +876,7 @@ const char *vcode_op_string(vcode_op_t op)
       "bit vec op", "const real", "value", "last event", "needs last value",
       "dynamic bounds", "array size", "index check", "bit shift",
       "storage hint", "debug out", "nested pcall", "cover stmt", "cover cond",
-      "uarray len", "heap save", "heap restore"
+      "uarray len", "heap save", "heap restore", "undefined"
    };
    if ((unsigned)op >= ARRAY_LEN(strs))
       return "???";
@@ -1034,9 +1046,10 @@ void vcode_dump(void)
    case VCODE_UNIT_CONTEXT: printf("context"); break;
    case VCODE_UNIT_FUNCTION: printf("function"); break;
    case VCODE_UNIT_PROCEDURE: printf("procedure"); break;
+   case VCODE_UNIT_THUNK: printf("thunk"); break;
    }
    color_printf("$$\n");
-   if (vu->kind != VCODE_UNIT_CONTEXT)
+   if (vu->kind != VCODE_UNIT_CONTEXT && vu->kind != VCODE_UNIT_THUNK)
       color_printf("Context    $cyan$%s$$\n", istr(vu->context->name));
    printf("Blocks     %d\n", vu->blocks.count);
    printf("Registers  %d\n", vu->regs.count);
@@ -1102,13 +1115,15 @@ void vcode_dump(void)
          printf("]\n");
       }
    }
-   else if (vu->kind == VCODE_UNIT_FUNCTION
-            || vu->kind == VCODE_UNIT_PROCEDURE) {
-      if (vu->result != VCODE_INVALID_TYPE) {
-         color_printf("Result     $cyan$");
-         vcode_dump_one_type(vu->result);
-         color_printf("$$\n");
-      }
+
+   if (vu->result != VCODE_INVALID_TYPE) {
+      color_printf("Result     $cyan$");
+      vcode_dump_one_type(vu->result);
+      color_printf("$$\n");
+   }
+
+   if (vu->kind == VCODE_UNIT_FUNCTION
+       || vu->kind == VCODE_UNIT_PROCEDURE) {
 
       printf("Parameters %d\n", vu->params.count);
 
@@ -1890,14 +1905,14 @@ void vcode_dump(void)
 
          case VCODE_OP_COVER_STMT:
             {
-               printf("%s %u", vcode_op_string(op->kind), op->index);
+               printf("%s %u", vcode_op_string(op->kind), op->bookmark.index);
             }
             break;
 
          case VCODE_OP_COVER_COND:
             {
                printf("%s %u sub %u ", vcode_op_string(op->kind),
-                      op->index, op->subkind);
+                      op->bookmark.index, op->subkind);
                vcode_dump_reg(op->args.items[0]);
             }
             break;
@@ -1914,6 +1929,14 @@ void vcode_dump(void)
             {
                printf("%s ", vcode_op_string(op->kind));
                vcode_dump_reg(op->args.items[0]);
+            }
+            break;
+
+         case VCODE_OP_UNDEFINED:
+            {
+               col += vcode_dump_reg(op->result);
+               col += printf(" := %s", vcode_op_string(op->kind));
+               vcode_dump_result_type(col, op);
             }
             break;
          }
@@ -2384,6 +2407,22 @@ static unsigned vcode_unit_calc_depth(vcode_unit_t unit)
    return hops;
 }
 
+static void vcode_registry_add(vcode_unit_t vu)
+{
+   if (registry == NULL)
+      registry = hash_new(256, true);
+
+   hash_put(registry, vu->name, vu);
+}
+
+vcode_unit_t vcode_find_unit(ident_t name)
+{
+   if (registry == NULL)
+      return NULL;
+   else
+      return hash_get(registry, name);
+}
+
 vcode_unit_t emit_function(ident_t name, vcode_unit_t context,
                            vcode_type_t result)
 {
@@ -2397,6 +2436,8 @@ vcode_unit_t emit_function(ident_t name, vcode_unit_t context,
 
    active_unit = vu;
    vcode_select_block(emit_block());
+
+   vcode_registry_add(vu);
 
    return vu;
 }
@@ -2413,6 +2454,8 @@ vcode_unit_t emit_procedure(ident_t name, vcode_unit_t context)
    active_unit = vu;
    vcode_select_block(emit_block());
 
+   vcode_registry_add(vu);
+
    return vu;
 }
 
@@ -2424,6 +2467,22 @@ vcode_unit_t emit_process(ident_t name, vcode_unit_t context)
    vu->kind    = VCODE_UNIT_PROCESS;
    vu->name    = name;
    vu->context = context;
+   vu->depth   = vcode_unit_calc_depth(vu);
+   vu->result  = VCODE_INVALID_TYPE;
+
+   active_unit = vu;
+   vcode_select_block(emit_block());
+
+   return vu;
+}
+
+vcode_unit_t emit_thunk(ident_t name, vcode_unit_t context, vcode_type_t type)
+{
+   vcode_unit_t vu = xcalloc(sizeof(struct vcode_unit));
+   vu->kind    = VCODE_UNIT_THUNK;
+   vu->name    = name;
+   vu->context = context;
+   vu->result  = type;
    vu->depth   = vcode_unit_calc_depth(vu);
 
    active_unit = vu;
@@ -2438,6 +2497,7 @@ vcode_unit_t emit_context(ident_t name)
    vu->kind    = VCODE_UNIT_CONTEXT;
    vu->name    = name;
    vu->context = vu;
+   vu->result  = VCODE_INVALID_TYPE;
 
    active_unit = vu;
    vcode_select_block(emit_block());
@@ -2446,7 +2506,7 @@ vcode_unit_t emit_context(ident_t name)
 }
 
 void emit_assert(vcode_reg_t value, vcode_reg_t message, vcode_reg_t length,
-                 vcode_reg_t severity, uint32_t index)
+                 vcode_reg_t severity, vcode_bookmark_t where)
 {
    int64_t value_const;
    if (vcode_reg_const(value, &value_const)) {
@@ -2463,20 +2523,20 @@ void emit_assert(vcode_reg_t value, vcode_reg_t message, vcode_reg_t length,
    vcode_add_arg(op, severity);
    vcode_add_arg(op, message);
    vcode_add_arg(op, length);
-   op->index = index;
+   op->bookmark = where;
 
    VCODE_ASSERT(vtype_eq(vcode_reg_type(value), vtype_bool()),
                 "value parameter to assert is not bool");
 }
 
 void emit_report(vcode_reg_t message, vcode_reg_t length, vcode_reg_t severity,
-                 uint32_t index)
+                 vcode_bookmark_t where)
 {
    op_t *op = vcode_add_op(VCODE_OP_REPORT);
    vcode_add_arg(op, severity);
    vcode_add_arg(op, message);
    vcode_add_arg(op, length);
-   op->index = index;
+   op->bookmark = where;
 
    active_unit->pure = false;
 }
@@ -2953,8 +3013,7 @@ void emit_store_indirect(vcode_reg_t reg, vcode_reg_t ptr)
                 "pointer and stored value do not have same type");
 }
 
-static vcode_reg_t emit_arith(vcode_op_t kind, vcode_reg_t lhs, vcode_reg_t rhs,
-                              uint32_t index)
+static vcode_reg_t emit_arith(vcode_op_t kind, vcode_reg_t lhs, vcode_reg_t rhs)
 {
    // Reuse any previous operation in this block with the same arguments
    VCODE_FOR_EACH_MATCHING_OP(other, kind) {
@@ -2967,7 +3026,6 @@ static vcode_reg_t emit_arith(vcode_op_t kind, vcode_reg_t lhs, vcode_reg_t rhs,
    vcode_add_arg(op, lhs);
    vcode_add_arg(op, rhs);
    op->result = vcode_add_reg(vcode_reg_type(lhs));
-   op->index = index;
 
    vcode_type_t lhs_type = vcode_reg_type(lhs);
    vcode_type_t rhs_type = vcode_reg_type(rhs);
@@ -2992,7 +3050,7 @@ vcode_reg_t emit_mul(vcode_reg_t lhs, vcode_reg_t rhs)
    if (vcode_reg_const(lhs, &lconst) && vcode_reg_const(rhs, &rconst))
       return emit_const(vcode_reg_type(lhs), lconst * rconst);
 
-   vcode_reg_t reg = emit_arith(VCODE_OP_MUL, lhs, rhs, UINT32_MAX);
+   vcode_reg_t reg = emit_arith(VCODE_OP_MUL, lhs, rhs);
 
    vtype_t *bl = vcode_type_data(vcode_reg_data(lhs)->bounds);
    vtype_t *br = vcode_type_data(vcode_reg_data(rhs)->bounds);
@@ -3011,13 +3069,19 @@ vcode_reg_t emit_mul(vcode_reg_t lhs, vcode_reg_t rhs)
    return reg;
 }
 
-vcode_reg_t emit_div(vcode_reg_t lhs, vcode_reg_t rhs, uint32_t index)
+vcode_reg_t emit_div(vcode_reg_t lhs, vcode_reg_t rhs, vcode_bookmark_t where)
 {
    int64_t lconst, rconst;
    if (vcode_reg_const(lhs, &lconst) && vcode_reg_const(rhs, &rconst))
       return emit_const(vcode_reg_type(lhs), lconst / rconst);
 
-   return emit_arith(VCODE_OP_DIV, lhs, rhs, index);
+   vcode_reg_t result = emit_arith(VCODE_OP_DIV, lhs, rhs);
+
+   block_t *block = vcode_block_data();
+   op_t *op = op_array_nth_ptr(&(block->ops), block->ops.count - 1);
+   op->bookmark = where;
+
+   return result;
 }
 
 vcode_reg_t emit_exp(vcode_reg_t lhs, vcode_reg_t rhs)
@@ -3026,7 +3090,7 @@ vcode_reg_t emit_exp(vcode_reg_t lhs, vcode_reg_t rhs)
    if (vcode_reg_const(lhs, &lconst) && vcode_reg_const(rhs, &rconst))
       return emit_const(vcode_reg_type(lhs), ipow(lconst, rconst));
 
-   return emit_arith(VCODE_OP_EXP, lhs, rhs, UINT32_MAX);
+   return emit_arith(VCODE_OP_EXP, lhs, rhs);
 }
 
 vcode_reg_t emit_mod(vcode_reg_t lhs, vcode_reg_t rhs)
@@ -3036,7 +3100,7 @@ vcode_reg_t emit_mod(vcode_reg_t lhs, vcode_reg_t rhs)
        && lconst > 0 && rconst > 0)
       return emit_const(vcode_reg_type(lhs), lconst % rconst);
 
-   return emit_arith(VCODE_OP_MOD, lhs, rhs, UINT32_MAX);
+   return emit_arith(VCODE_OP_MOD, lhs, rhs);
 }
 
 vcode_reg_t emit_rem(vcode_reg_t lhs, vcode_reg_t rhs)
@@ -3046,7 +3110,7 @@ vcode_reg_t emit_rem(vcode_reg_t lhs, vcode_reg_t rhs)
        && lconst > 0 && rconst > 0)
       return emit_const(vcode_reg_type(lhs), lconst % rconst);
 
-   return emit_arith(VCODE_OP_REM, lhs, rhs, UINT32_MAX);
+   return emit_arith(VCODE_OP_REM, lhs, rhs);
 }
 
 vcode_reg_t emit_add(vcode_reg_t lhs, vcode_reg_t rhs)
@@ -3065,7 +3129,7 @@ vcode_reg_t emit_add(vcode_reg_t lhs, vcode_reg_t rhs)
    else if (l_is_const && lconst == 0)
       return rhs;
 
-   vcode_reg_t reg = emit_arith(VCODE_OP_ADD, lhs, rhs, UINT32_MAX);
+   vcode_reg_t reg = emit_arith(VCODE_OP_ADD, lhs, rhs);
 
    reg_t *rr = vcode_reg_data(reg);
    if (is_pointer)
@@ -3093,7 +3157,7 @@ vcode_reg_t emit_sub(vcode_reg_t lhs, vcode_reg_t rhs)
    else if (l_is_const && lconst == 0)
       return rhs;
 
-   vcode_reg_t reg = emit_arith(VCODE_OP_SUB, lhs, rhs, UINT32_MAX);
+   vcode_reg_t reg = emit_arith(VCODE_OP_SUB, lhs, rhs);
 
    reg_t *rr = vcode_reg_data(reg);
    if (vtype_kind(vcode_reg_type(reg)) == VCODE_TYPE_POINTER)
@@ -3112,7 +3176,7 @@ vcode_reg_t emit_sub(vcode_reg_t lhs, vcode_reg_t rhs)
 }
 
 void emit_bounds(vcode_reg_t reg, vcode_type_t bounds, bounds_kind_t kind,
-                 uint32_t index, uint32_t hint)
+                 vcode_bookmark_t where, vcode_bookmark_t hint)
 {
    if (reg == VCODE_INVALID_REG)
       return;
@@ -3123,10 +3187,10 @@ void emit_bounds(vcode_reg_t reg, vcode_type_t bounds, bounds_kind_t kind,
 
    op_t *op = vcode_add_op(VCODE_OP_BOUNDS);
    vcode_add_arg(op, reg);
-   op->type    = bounds;
-   op->subkind = kind;
-   op->index   = index;
-   op->hint    = hint;
+   op->type     = bounds;
+   op->subkind  = kind;
+   op->bookmark = where;
+   op->hint     = hint;
 
    const vtype_kind_t tkind = vtype_kind(bounds);
    VCODE_ASSERT(tkind == VCODE_TYPE_INT || tkind == VCODE_TYPE_REAL,
@@ -3247,7 +3311,8 @@ void emit_return(vcode_reg_t reg)
    if (reg != VCODE_INVALID_REG) {
       vcode_add_arg(op, reg);
 
-      VCODE_ASSERT(active_unit->kind == VCODE_UNIT_FUNCTION,
+      VCODE_ASSERT(active_unit->kind == VCODE_UNIT_FUNCTION
+                   || active_unit->kind == VCODE_UNIT_THUNK,
                    "returning value fron non-function unit");
       VCODE_ASSERT(vtype_eq(active_unit->result, vcode_reg_type(reg)),
                    "return value incorrect type");
@@ -3352,11 +3417,11 @@ vcode_reg_t emit_abs(vcode_reg_t lhs)
    return op->result;
 }
 
-vcode_reg_t emit_image(vcode_reg_t value, uint32_t index)
+vcode_reg_t emit_image(vcode_reg_t value, vcode_bookmark_t where)
 {
    op_t *op = vcode_add_op(VCODE_OP_IMAGE);
    vcode_add_arg(op, value);
-   op->index = index;
+   op->bookmark = where;
 
    op->result = vcode_add_reg(
       vtype_uarray(1, vtype_char(), vtype_int(0, 127)));
@@ -3447,7 +3512,7 @@ static vcode_reg_t emit_logical(vcode_op_t op, vcode_reg_t lhs, vcode_reg_t rhs)
       }
    }
 
-   vcode_reg_t result = emit_arith(op, lhs, rhs, UINT32_MAX);
+   vcode_reg_t result = emit_arith(op, lhs, rhs);
 
    VCODE_ASSERT(vtype_eq(vcode_reg_type(lhs), vtbool)
                 && vtype_eq(vcode_reg_type(rhs), vtbool),
@@ -3664,14 +3729,15 @@ void emit_resolved_address(vcode_var_t var, vcode_signal_t signal)
    op->address = var;
 }
 
-void emit_set_initial(vcode_signal_t signal, vcode_reg_t value, uint32_t index,
-                      ident_t resolution, vcode_type_t type)
+void emit_set_initial(vcode_signal_t signal, vcode_reg_t value,
+                      vcode_bookmark_t index, ident_t resolution,
+                      vcode_type_t type)
 {
    op_t *op = vcode_add_op(VCODE_OP_SET_INITIAL);
-   op->signal = signal;
-   op->index  = index;
-   op->func   = resolution;
-   op->type   = type;
+   op->signal   = signal;
+   op->bookmark = index;
+   op->func     = resolution;
+   op->type     = type;
    vcode_add_arg(op, value);
 }
 
@@ -4014,7 +4080,7 @@ vcode_reg_t emit_new(vcode_type_t type, vcode_reg_t length)
    return (op->result = vcode_add_reg(vtype_access(type)));
 }
 
-void emit_null_check(vcode_reg_t ptr, uint32_t index)
+void emit_null_check(vcode_reg_t ptr, vcode_bookmark_t where)
 {
    VCODE_FOR_EACH_MATCHING_OP(other, VCODE_OP_NULL_CHECK) {
       if (other->args.items[0] == ptr)
@@ -4023,7 +4089,7 @@ void emit_null_check(vcode_reg_t ptr, uint32_t index)
 
    op_t *op = vcode_add_op(VCODE_OP_NULL_CHECK);
    vcode_add_arg(op, ptr);
-   op->index = index;
+   op->bookmark = where;
 
    VCODE_ASSERT(vtype_kind(vcode_reg_type(ptr)) == VCODE_TYPE_ACCESS,
                 "null check argument must be an access");
@@ -4096,12 +4162,13 @@ vcode_reg_t emit_bit_vec_op(bit_vec_op_kind_t kind, vcode_reg_t lhs_data,
    return (op->result = vcode_add_reg(result));
 }
 
-vcode_reg_t emit_value(vcode_reg_t string, vcode_reg_t len, uint32_t index)
+vcode_reg_t emit_value(vcode_reg_t string, vcode_reg_t len,
+                       vcode_bookmark_t where)
 {
    op_t *op = vcode_add_op(VCODE_OP_VALUE);
    vcode_add_arg(op, string);
    vcode_add_arg(op, len);
-   op->index = index;
+   op->bookmark = where;
 
    VCODE_ASSERT(vcode_reg_kind(string) == VCODE_TYPE_POINTER,
                 "string argument to value must be a pointer");
@@ -4134,7 +4201,8 @@ void emit_needs_last_value(vcode_signal_t sig)
 }
 
 void emit_dynamic_bounds(vcode_reg_t reg, vcode_reg_t low, vcode_reg_t high,
-                         vcode_reg_t kind, uint32_t index, uint32_t hint)
+                         vcode_reg_t kind, vcode_bookmark_t where,
+                         vcode_bookmark_t hint)
 {
    int64_t lconst, hconst;
    if (vcode_reg_const(low, &lconst) && vcode_reg_const(high, &hconst)) {
@@ -4146,7 +4214,7 @@ void emit_dynamic_bounds(vcode_reg_t reg, vcode_reg_t low, vcode_reg_t high,
 
       int64_t kconst;
       if (vcode_reg_const(kind, &kconst)) {
-         emit_bounds(reg, vtype_int(lconst, hconst), kconst, index, hint);
+         emit_bounds(reg, vtype_int(lconst, hconst), kconst, where, hint);
          return;
       }
    }
@@ -4160,8 +4228,8 @@ void emit_dynamic_bounds(vcode_reg_t reg, vcode_reg_t low, vcode_reg_t high,
    vcode_add_arg(op, low);
    vcode_add_arg(op, high);
    vcode_add_arg(op, kind);
-   op->index = index;
-   op->hint  = hint;
+   op->bookmark = where;
+   op->hint = hint;
 
    VCODE_ASSERT(vtype_eq(vcode_reg_type(low), vcode_reg_type(high)),
                 "type mismatch in dynamic bounds range");
@@ -4169,7 +4237,7 @@ void emit_dynamic_bounds(vcode_reg_t reg, vcode_reg_t low, vcode_reg_t high,
                 "dynamic bounds kind argument must be offset");
 }
 
-void emit_array_size(vcode_reg_t llen, vcode_reg_t rlen, uint32_t index)
+void emit_array_size(vcode_reg_t llen, vcode_reg_t rlen, vcode_bookmark_t where)
 {
    if (rlen == llen)
       return;
@@ -4177,11 +4245,11 @@ void emit_array_size(vcode_reg_t llen, vcode_reg_t rlen, uint32_t index)
    op_t *op = vcode_add_op(VCODE_OP_ARRAY_SIZE);
    vcode_add_arg(op, llen);
    vcode_add_arg(op, rlen);
-   op->index = index;
+   op->bookmark = where;
 }
 
 static op_t *emit_index_check_null(vcode_reg_t rlow, vcode_reg_t rhigh,
-                                   bounds_kind_t kind, uint32_t index)
+                                   bounds_kind_t kind, vcode_bookmark_t where)
 {
    int64_t rlow_const, rhigh_const;
    const bool null =
@@ -4197,15 +4265,15 @@ static op_t *emit_index_check_null(vcode_reg_t rlow, vcode_reg_t rhigh,
    op_t *op = vcode_add_op(VCODE_OP_INDEX_CHECK);
    vcode_add_arg(op, rlow);
    vcode_add_arg(op, rhigh);
-   op->subkind = kind;
-   op->index   = index;
-   op->type    = VCODE_INVALID_TYPE;
+   op->subkind  = kind;
+   op->bookmark = where;
+   op->type     = VCODE_INVALID_TYPE;
 
    return op;
 }
 
 void emit_index_check(vcode_reg_t rlow, vcode_reg_t rhigh, vcode_type_t bounds,
-                      bounds_kind_t kind, uint32_t index)
+                      bounds_kind_t kind, vcode_bookmark_t where)
 {
    if (vtype_includes(bounds, vcode_reg_data(rlow)->bounds)
        && vtype_includes(bounds, vcode_reg_data(rhigh)->bounds)) {
@@ -4213,16 +4281,16 @@ void emit_index_check(vcode_reg_t rlow, vcode_reg_t rhigh, vcode_type_t bounds,
       return;
    }
 
-   op_t *op = emit_index_check_null(rlow, rhigh, kind, index);
+   op_t *op = emit_index_check_null(rlow, rhigh, kind, where);
    if (op != NULL)
       op->type = bounds;
 }
 
 void emit_dynamic_index_check(vcode_reg_t rlow, vcode_reg_t rhigh,
                               vcode_reg_t blow, vcode_reg_t bhigh,
-                              bounds_kind_t kind, uint32_t index)
+                              bounds_kind_t kind, vcode_bookmark_t where)
 {
-   op_t *op = emit_index_check_null(rlow, rhigh, kind, index);
+   op_t *op = emit_index_check_null(rlow, rhigh, kind, where);
    if (op != NULL) {
       vcode_add_arg(op, blow);
       vcode_add_arg(op, bhigh);
@@ -4279,14 +4347,14 @@ void emit_debug_out(vcode_reg_t reg)
 void emit_cover_stmt(uint32_t tag)
 {
    op_t *op = vcode_add_op(VCODE_OP_COVER_STMT);
-   op->index = tag;
+   op->tag = tag;
 }
 
 void emit_cover_cond(vcode_reg_t test, uint32_t tag, unsigned sub)
 {
    op_t *op = vcode_add_op(VCODE_OP_COVER_COND);
    vcode_add_arg(op, test);
-   op->index   = tag;
+   op->tag     = tag;
    op->subkind = sub;
 }
 
@@ -4305,4 +4373,11 @@ void emit_heap_restore(vcode_reg_t reg)
                 "saved heap must have offset type");
    VCODE_ASSERT(vcode_find_definition(reg)->kind == VCODE_OP_HEAP_SAVE,
                 "register for heap restore must come from heap save");
+}
+
+vcode_reg_t emit_undefined(vcode_type_t type)
+{
+   op_t *op = vcode_add_op(VCODE_OP_UNDEFINED);
+   return (op->result = vcode_add_reg(type));
+
 }

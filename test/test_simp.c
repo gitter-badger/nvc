@@ -280,10 +280,9 @@ START_TEST(test_ffold)
 {
    input_from_file(TESTDIR "/simp/ffold.vhd");
 
-   tree_t a = parse_and_check(T_PACKAGE, T_PACK_BODY, T_ENTITY, T_ARCH);
+   tree_t a = parse_check_and_simplify(T_PACKAGE, T_PACK_BODY,
+                                       T_ENTITY, T_ARCH);
    fail_unless(sem_errors() == 0);
-
-   simplify(a);
 
    fail_unless(folded_i(tree_value(tree_decl(a, 6)), 6));
    fail_unless(folded_i(tree_value(tree_decl(a, 8)), 4));

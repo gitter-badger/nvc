@@ -1,5 +1,5 @@
 //
-//  Copyright (C) 2011-2015  Nick Gasson
+//  Copyright (C) 2011-2016  Nick Gasson
 //
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
@@ -2259,7 +2259,7 @@ static void cgen_op_debug_out(int op, cgen_ctx_t *ctx)
 
 static void cgen_op_cover_stmt(int op, cgen_ctx_t *ctx)
 {
-   const int cover_tag = vcode_get_index(op);
+   const uint32_t cover_tag = vcode_get_tag(op);
 
    LLVMValueRef cover_counts = LLVMGetNamedGlobal(module, "cover_stmts");
 
@@ -2275,7 +2275,7 @@ static void cgen_op_cover_stmt(int op, cgen_ctx_t *ctx)
 
 static void cgen_op_cover_cond(int op, cgen_ctx_t *ctx)
 {
-   const int cover_tag = vcode_get_index(op);
+   const uint32_t cover_tag = vcode_get_tag(op);
    const int sub_cond  = vcode_get_subkind(op);
 
    LLVMValueRef cover_conds = LLVMGetNamedGlobal(module, "cover_conds");

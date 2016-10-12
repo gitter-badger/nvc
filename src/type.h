@@ -50,6 +50,7 @@ type_kind_t type_kind(type_t t);
 const char *type_kind_str(type_kind_t t);
 
 uint32_t type_index(type_t t);
+bool type_has_index(type_t t);
 
 bool type_eq(type_t a, type_t b);
 

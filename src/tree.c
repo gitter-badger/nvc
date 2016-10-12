@@ -31,7 +31,8 @@ static const imask_t has_map[T_LAST_TREE_KIND] = {
    (I_IDENT | I_PORTS | I_GENERICS | I_CONTEXT | I_DECLS | I_STMTS | I_ATTRS),
 
    // T_ARCH
-   (I_IDENT | I_IDENT2 | I_DECLS | I_STMTS | I_CONTEXT | I_REF | I_ATTRS),
+   (I_IDENT | I_IDENT2 | I_DECLS | I_STMTS | I_CONTEXT | I_REF | I_ATTRS
+    | I_CODE),
 
    // T_PORT_DECL
    (I_IDENT | I_VALUE | I_TYPE | I_SUBKIND | I_CLASS | I_ATTRS | I_FLAGS),
@@ -997,6 +998,11 @@ void tree_set_file_mode(tree_t t, tree_t m)
 uint32_t tree_index(tree_t t)
 {
    return object_index(&(t->object));
+}
+
+bool tree_has_index(tree_t t)
+{
+   return object_has_index(&(t->object));
 }
 
 unsigned tree_visit(tree_t t, tree_visit_fn_t fn, void *context)

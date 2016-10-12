@@ -22,7 +22,7 @@ typedef struct {
    int           hops;
    int           field;
    int           subkind;
-   uint32_t      index;
+   uint32_t      tag;
 } check_bb_t;
 
 #define CAT(x, y) x##y
@@ -266,10 +266,10 @@ static void check_bb(int bb, const check_bb_t *expect, int len)
          // Fall-through
 
       case VCODE_OP_COVER_STMT:
-         if (e->index != vcode_get_index(i)) {
+         if (e->tag != vcode_get_tag(i)) {
             vcode_dump();
             fail("expected op %d in block %d to have cover tag %d but has %d",
-                 i, bb, e->index, vcode_get_index(i));
+                 i, bb, e->tag, vcode_get_tag(i));
          }
          break;
 
@@ -1932,27 +1932,27 @@ START_TEST(test_cover)
    vcode_select_unit(v0);
 
    EXPECT_BB(1) = {
-      { VCODE_OP_COVER_STMT, .index = 0 },
+      { VCODE_OP_COVER_STMT, .tag = 0 },
       { VCODE_OP_CONST, .value = 1 },
       { VCODE_OP_STORE, .name = "V" },
-      { VCODE_OP_COVER_STMT, .index = 2 },
+      { VCODE_OP_COVER_STMT, .tag = 2 },
       { VCODE_OP_LOAD, .name = "resolved_:cover:s" },
       { VCODE_OP_LOAD_INDIRECT },
       { VCODE_OP_CMP, .cmp = VCODE_CMP_EQ },
-      { VCODE_OP_COVER_COND, .index = 0, .subkind = 1 },
+      { VCODE_OP_COVER_COND, .tag = 0, .subkind = 1 },
       { VCODE_OP_LOAD_INDIRECT },
       { VCODE_OP_CONST, .value = 10 },
       { VCODE_OP_CMP, .cmp = VCODE_CMP_GT },
-      { VCODE_OP_COVER_COND, .index = 0, .subkind = 2 },
+      { VCODE_OP_COVER_COND, .tag = 0, .subkind = 2 },
       { VCODE_OP_OR },
-      { VCODE_OP_COVER_COND, .index = 0, .subkind = 0 },
+      { VCODE_OP_COVER_COND, .tag = 0, .subkind = 0 },
       { VCODE_OP_COND, .target = 2, .target_else = 3 }
    };
 
    CHECK_BB(1);
 
    EXPECT_BB(2) = {
-      { VCODE_OP_COVER_STMT, .index = 1 },
+      { VCODE_OP_COVER_STMT, .tag = 1 },
       { VCODE_OP_CONST, .value = 2 },
       { VCODE_OP_STORE, .name = "V" },
       { VCODE_OP_JUMP, .target = 3 }

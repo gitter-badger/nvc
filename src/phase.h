@@ -1,5 +1,5 @@
 //
-//  Copyright (C) 2011-2015  Nick Gasson
+//  Copyright (C) 2011-2016  Nick Gasson
 //
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
@@ -20,6 +20,14 @@
 
 #include "tree.h"
 
+typedef enum {
+   EVAL_BOUNDS  = (1 << 0),
+   EVAL_FCALL   = (1 << 1),
+   EVAL_WARN    = (1 << 2),
+   EVAL_LOWER   = (1 << 3),
+   EVAL_VERBOSE = (1 << 4),
+} eval_flags_t;
+
 // Annotate types and perform other semantics checks on a tree.
 // Returns false on error.
 bool sem_check(tree_t t);
@@ -37,7 +45,7 @@ void bounds_check(tree_t top);
 int bounds_errors(void);
 
 // Evaluate a function call at compile time
-tree_t eval(tree_t fcall);
+tree_t eval(tree_t fcall, eval_flags_t flags);
 
 // Elaborate a top level entity
 tree_t elab(tree_t top);
@@ -81,5 +89,8 @@ int parse_errors(void);
 
 // Generate vcode for a design unit
 void lower_unit(tree_t unit);
+
+// Generate vcode for an isolated function call
+vcode_unit_t lower_thunk(tree_t fcall);
 
 #endif  // _PHASE_H

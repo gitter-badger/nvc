@@ -91,6 +91,7 @@ tree_t run_elab(void)
       sem_check(t);
       fail_if(sem_errors() > 0);
 
+      lower_unit(t);
       simplify(t);
 
       if (tree_kind(t) == T_ENTITY)
@@ -113,8 +114,10 @@ tree_t _parse_and_check(const tree_kind_t *array, int num, bool simp)
                   "expected %s have %s", tree_kind_str(array[i]),
                   tree_kind_str(tree_kind(last)));
 
-      if (sem_check(last) && simp)
+      if (sem_check(last) && simp) {
+         lower_unit(last);
          simplify(last);
+      }
    }
 
    fail_unless(parse() == NULL);

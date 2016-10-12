@@ -77,6 +77,12 @@ uint32_t object_index(const object_t *object)
    return object->index;
 }
 
+bool object_has_index(const object_t *object)
+{
+  assert(object != NULL);
+  return object->index != UINT32_MAX;
+}
+
 void object_change_kind(const object_class_t *class, object_t *object, int kind)
 {
    if (kind == object->kind)
