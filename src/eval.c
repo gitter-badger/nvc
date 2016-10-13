@@ -304,7 +304,7 @@ static void eval_op_mod(int op, eval_state_t *state)
          fatal_at(tree_loc(state->fcall), "division by zero");
       else {
          dst->kind    = VALUE_INTEGER;
-         dst->integer = lhs->integer % rhs->integer;
+         dst->integer = labs(lhs->integer % rhs->integer);
       }
       break;
 
@@ -325,7 +325,8 @@ static void eval_op_rem(int op, eval_state_t *state)
          fatal_at(tree_loc(state->fcall), "division by zero");
       else {
          dst->kind    = VALUE_INTEGER;
-         dst->integer = labs(lhs->integer % rhs->integer);
+         dst->integer =
+            lhs->integer - (lhs->integer / rhs->integer) * rhs->integer;
       }
       break;
 
