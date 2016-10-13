@@ -91,15 +91,16 @@ architecture a of ffold is
 begin
 
     b1: block is
-        signal s1 : integer := add1(5);
-        signal s2 : integer := add4(1);
-        signal s3 : integer := log2(11);
-        signal s4 : integer := log2(integer(real'(5.5)));
-        signal s5 : integer := case1(1);
-        signal s6 : integer := case1(7);
-        signal s7 : integer := adddef;
-        signal s8 : boolean := chain2("foo", "hello");
-        --signal s9 : boolean := flip("1010") = "0101";
+        signal s1  : integer := add1(5);
+        signal s2  : integer := add4(1);
+        signal s3  : integer := log2(11);
+        signal s4  : integer := log2(integer(real'(5.5)));
+        signal s5  : integer := case1(1);
+        signal s6  : integer := case1(7);
+        signal s7  : integer := adddef;
+        signal s8  : boolean := chain2("foo", "hello");
+        signal s9  : boolean := flip("1010") = "0101";
+        signal s10 : boolean := flip("1010") = "0111";
     begin
     end block;
 

@@ -34,6 +34,7 @@ typedef enum {
    VALUE_INTEGER,
    VALUE_POINTER,
    VALUE_UARRAY,
+   VALUE_CARRAY
 } value_kind_t;
 
 typedef struct value value_t;
@@ -68,6 +69,11 @@ typedef struct {
    void        *heap;
    size_t       halloc;
 } eval_state_t;
+
+#define EVAL_WARN(t, ...) do {                                          \
+      if (state->flags & EVAL_WARN)                                     \
+         warn_at(tree_loc(t), __VA_ARGS__);                             \
+   } while (0)
 
 static void eval_vcode(eval_state_t *state);
 
@@ -119,10 +125,9 @@ static bool eval_possible(tree_t t, eval_flags_t flags)
 static void *eval_alloc(size_t nbytes, eval_state_t *state)
 {
    if (state->halloc + nbytes > EVAL_HEAP) {
-      if (state->flags & EVAL_WARN)
-         warn_at(tree_loc(state->fcall), "evaluation heap exhaustion prevents "
-                 "constant folding (%zu allocated, %zu requested",
-                 state->halloc, nbytes);
+      EVAL_WARN(state->fcall, "evaluation heap exhaustion prevents "
+                "constant folding (%zu allocated, %zu requested)",
+                state->halloc, nbytes);
       state->failed = true;
       return NULL;
    }
@@ -145,6 +150,7 @@ static value_t *eval_get_var(vcode_var_t var, eval_state_t *state)
    if (vcode_var_context(var) == vcode_unit_depth())
       return &(state->vars[vcode_var_index(var)]);
    else {
+      // TODO: implement this
       state->failed = true;
       static value_t dummy = {
          .kind = VALUE_INTEGER,
@@ -215,6 +221,12 @@ static void eval_op_add(int op, eval_state_t *state)
    case VALUE_REAL:
       dst->kind = VALUE_REAL;
       dst->real = lhs->real + rhs->real;
+      break;
+
+   case VALUE_POINTER:
+      assert(rhs->kind == VALUE_INTEGER);
+      dst->kind = VALUE_POINTER;
+      dst->pointer = lhs->pointer + rhs->integer;
       break;
 
    default:
@@ -458,9 +470,8 @@ static void eval_op_fcall(int op, eval_state_t *state)
    }
 
    if (vcode == NULL) {
-      if (state->flags & EVAL_WARN)
-         warn_at(tree_loc(state->fcall), "function call to %s prevents "
-                 "constant folding", istr(func_name));
+      EVAL_WARN(state->fcall, "function call to %s prevents "
+                "constant folding", istr(func_name));
       state->failed = true;
       vcode_state_restore(&vcode_state);
       return;
@@ -470,10 +481,36 @@ static void eval_op_fcall(int op, eval_state_t *state)
    vcode_select_block(0);
 
    value_t *regs LOCAL = xcalloc(sizeof(value_t) * vcode_count_regs());
-   value_t *vars LOCAL = xcalloc(sizeof(value_t) * vcode_count_vars());
-
    for (int i = 0; i < nparams; i++)
       regs[i] = *params[i];
+
+   const int nvars = vcode_count_vars();
+   value_t *vars LOCAL = xcalloc(sizeof(value_t) * nvars);
+   for (int i = 0; i < nvars; i++) {
+      vcode_var_t var = vcode_var_handle(i);
+      vcode_type_t type = vcode_var_type(var);
+      switch (vtype_kind(type)) {
+      case VCODE_TYPE_CARRAY:
+         vars[i].kind = VALUE_CARRAY;
+         vars[i].pointer =
+            eval_alloc(sizeof(value_t) * vtype_size(type), state);
+         break;
+
+      case VCODE_TYPE_INT:
+         vars[i].kind = VALUE_INTEGER;
+         vars[i].integer = 0;
+         break;
+
+      case VCODE_TYPE_REAL:
+         vars[i].kind = VALUE_REAL;
+         vars[i].real = 0;
+         break;
+
+      default:
+         EVAL_WARN(state->fcall, "cannot evaluate variables with type %d",
+                   vtype_kind(type));
+      }
+   }
 
    eval_state_t new = {
       .regs   = regs,
@@ -563,7 +600,7 @@ static void eval_op_const_array(int op, eval_state_t *state)
 
    const int nargs = vcode_count_args(op);
 
-   dst->kind    = VALUE_POINTER;
+   dst->kind = VALUE_POINTER;
    if ((dst->pointer = eval_alloc(sizeof(value_t) * nargs, state))) {
       for (int i = 0; i < nargs; i++)
          dst->pointer[i] = *eval_get_reg(vcode_get_arg(op, i), state);
@@ -585,9 +622,8 @@ static void eval_op_wrap(int op, eval_state_t *state)
    const int ndims = (vcode_count_args(op) - 1) / 3;
    if (ndims > MAX_DIMS) {
       state->failed = true;
-      if (state->flags & EVAL_WARN)
-         warn_at(tree_loc(state->fcall), "%d dimensional array prevents "
-                 "constant folding", ndims);
+      EVAL_WARN(state->fcall, "%d dimensional array prevents "
+                "constant folding", ndims);
    }
    else {
       dst->uarray->ndims = ndims;
@@ -715,9 +751,8 @@ static void eval_op_cond(int op, eval_state_t *state)
 
 static void eval_op_undefined(int op, eval_state_t *state)
 {
-   if (state->flags & EVAL_WARN)
-      warn_at(tree_loc(state->fcall), "reference to object without defined "
-              "value in this phase prevents constant folding");
+   EVAL_WARN(state->fcall, "reference to object without defined "
+             "value in this phase prevents constant folding");
 
    state->failed = true;
 }
@@ -726,6 +761,34 @@ static void eval_op_nested_fcall(int op, eval_state_t *state)
 {
    // TODO
    state->failed = true;
+}
+
+static void eval_op_index(int op, eval_state_t *state)
+{
+   value_t *value = eval_get_var(vcode_get_address(op), state);
+   assert(value->kind == VALUE_CARRAY);
+
+   value_t *dst = eval_get_reg(vcode_get_result(op), state);
+   dst->kind = VALUE_POINTER;
+   dst->pointer = value->pointer;
+}
+
+static void eval_op_load_indirect(int op, eval_state_t *state)
+{
+   value_t *dst = eval_get_reg(vcode_get_result(op), state);
+   value_t *src = eval_get_reg(vcode_get_arg(op, 0), state);
+
+   assert(src->kind == VALUE_POINTER);
+   *dst = *(src->pointer);
+}
+
+static void eval_op_store_indirect(int op, eval_state_t *state)
+{
+   value_t *dst = eval_get_reg(vcode_get_arg(op, 1), state);
+   value_t *src = eval_get_reg(vcode_get_arg(op, 0), state);
+
+   assert(dst->kind == VALUE_POINTER);
+   *(dst->pointer) = *src;
 }
 
 static void eval_op_case(int op, eval_state_t *state)
@@ -744,6 +807,20 @@ static void eval_op_case(int op, eval_state_t *state)
 
    vcode_select_block(target);
    eval_vcode(state);
+}
+
+static void eval_op_copy(int op, eval_state_t *state)
+{
+   value_t *dst = eval_get_reg(vcode_get_arg(op, 0), state);
+   value_t *src = eval_get_reg(vcode_get_arg(op, 1), state);
+   value_t *count = eval_get_reg(vcode_get_arg(op, 2), state);
+
+   assert(dst->kind = VALUE_POINTER);
+   assert(src->kind = VALUE_POINTER);
+   assert(count->kind = VALUE_INTEGER);
+
+   for (int i = 0; i < count->integer; i++)
+      dst->pointer[i] = src->pointer[i];
 }
 
 static void eval_vcode(eval_state_t *state)
@@ -875,6 +952,22 @@ static void eval_vcode(eval_state_t *state)
 
       case VCODE_OP_DYNAMIC_BOUNDS:
          eval_op_dynamic_bounds(i, state);
+         break;
+
+      case VCODE_OP_INDEX:
+         eval_op_index(i, state);
+         break;
+
+      case VCODE_OP_COPY:
+         eval_op_copy(i, state);
+         break;
+
+      case VCODE_OP_LOAD_INDIRECT:
+         eval_op_load_indirect(i, state);
+         break;
+
+      case VCODE_OP_STORE_INDIRECT:
+         eval_op_store_indirect(i, state);
          break;
 
       default:
