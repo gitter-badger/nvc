@@ -79,14 +79,28 @@ architecture a of ffold is
         return r;
     end function;
 
-    signal s1 : integer := add1(5);
-    signal s2 : integer := add4(1);
-    signal s3 : integer := log2(11);
-    signal s4 : integer := log2(integer(real'(5.5)));
-    signal s5 : integer := case1(1);
-    signal s6 : integer := case1(7);
-    signal s7 : integer := adddef;
-    signal s8 : boolean := chain2("foo", "hello");
+    function flip(x : bit_vector(3 downto 0)) return bit_vector is
+        variable r : bit_vector(3 downto 0);
+    begin
+        r(0) := x(3);
+        r(1) := x(2);
+        r(2) := x(1);
+        r(3) := x(0);
+        return r;
+    end function;
 begin
+
+    b1: block is
+        signal s1 : integer := add1(5);
+        signal s2 : integer := add4(1);
+        signal s3 : integer := log2(11);
+        signal s4 : integer := log2(integer(real'(5.5)));
+        signal s5 : integer := case1(1);
+        signal s6 : integer := case1(7);
+        signal s7 : integer := adddef;
+        signal s8 : boolean := chain2("foo", "hello");
+        --signal s9 : boolean := flip("1010") = "0101";
+    begin
+    end block;
 
 end architecture;

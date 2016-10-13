@@ -287,13 +287,17 @@ START_TEST(test_ffold)
    lower_unit(a);
    fold(a);
 
-   fail_unless(folded_i(tree_value(tree_decl(a, 6)), 6));
-   fail_unless(folded_i(tree_value(tree_decl(a, 8)), 4));
-   fail_unless(folded_i(tree_value(tree_decl(a, 9)), 3));
-   fail_unless(folded_i(tree_value(tree_decl(a, 10)), 2));
-   fail_unless(folded_i(tree_value(tree_decl(a, 11)), 5));
-   fail_unless(folded_i(tree_value(tree_decl(a, 12)), 10));
-   fail_unless(folded_b(tree_value(tree_decl(a, 13)), true));
+   tree_t b = tree_stmt(a, 0);
+   fail_unless(tree_kind(b) == T_BLOCK);
+
+   fail_unless(folded_i(tree_value(tree_decl(b, 0)), 6));
+   fail_unless(folded_i(tree_value(tree_decl(b, 2)), 4));
+   fail_unless(folded_i(tree_value(tree_decl(b, 3)), 3));
+   fail_unless(folded_i(tree_value(tree_decl(b, 4)), 2));
+   fail_unless(folded_i(tree_value(tree_decl(b, 5)), 5));
+   fail_unless(folded_i(tree_value(tree_decl(b, 6)), 10));
+   fail_unless(folded_b(tree_value(tree_decl(b, 7)), true));
+   //fail_unless(folded_b(tree_value(tree_decl(b, 8)), true));
 }
 END_TEST
 

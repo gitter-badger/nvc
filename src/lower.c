@@ -4664,6 +4664,7 @@ void lower_unit(tree_t unit)
 
    vcode_objs = hash_new(4096, true);
    allow_undefined = false;
+   tmp_alloc_used = false;
 
    switch (tree_kind(unit)) {
    case T_ELAB:
@@ -4701,6 +4702,7 @@ vcode_unit_t lower_thunk(tree_t fcall)
 
    vcode_select_unit(thunk_context);
    allow_undefined = true;
+   tmp_alloc_used = false;
 
    vcode_type_t vtype = lower_type(tree_type(fcall));
    vcode_unit_t thunk = emit_thunk(tree_ident(fcall), thunk_context, vtype);
