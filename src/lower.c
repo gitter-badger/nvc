@@ -3205,6 +3205,23 @@ static void lower_if(tree_t stmt, loop_stack_t *loops)
    vcode_reg_t test = lower_test_expr(tree_value(stmt));
 
    const int nelses = tree_else_stmts(stmt);
+   const int nstmts = tree_stmts(stmt);
+
+   int64_t cval;
+   if (vcode_reg_const(test, &cval)) {
+      emit_comment("Condition of if statement line %d is always %s",
+                   tree_loc(stmt)->first_line, cval ? "true" : "false");
+      if (cval) {
+         for (int i = 0; i < nstmts; i++)
+            lower_stmt(tree_stmt(stmt, i), loops);
+      }
+      else {
+         for (int i = 0; i < nelses; i++)
+            lower_stmt(tree_else_stmt(stmt, i), loops);
+      }
+
+      return;
+   }
 
    vcode_block_t btrue = emit_block();
    vcode_block_t bfalse = nelses > 0 ? emit_block() : VCODE_INVALID_BLOCK;
@@ -3214,7 +3231,6 @@ static void lower_if(tree_t stmt, loop_stack_t *loops)
 
    vcode_select_block(btrue);
 
-   const int nstmts = tree_stmts(stmt);
    for (int i = 0; i < nstmts; i++)
       lower_stmt(tree_stmt(stmt, i), loops);
 
