@@ -390,7 +390,7 @@ static void eval_op_cast(int op, eval_state_t *state)
    case VCODE_TYPE_OFFSET:
       dst->kind = VALUE_INTEGER;
       switch (src->kind) {
-      case VALUE_INTEGER: break;
+      case VALUE_INTEGER: dst->integer = src->integer; break;
       case VALUE_REAL: dst->integer = (int64_t)src->real; break;
       default: break;
       }
@@ -400,7 +400,7 @@ static void eval_op_cast(int op, eval_state_t *state)
       dst->kind = VALUE_REAL;
       switch (src->kind) {
       case VALUE_INTEGER: dst->real = (double)src->integer; break;
-      case VALUE_REAL: break;
+      case VALUE_REAL: dst->real = src->real; break;
       default: break;
       }
       break;

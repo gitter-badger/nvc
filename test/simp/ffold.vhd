@@ -88,6 +88,16 @@ architecture a of ffold is
         r(3) := x(0);
         return r;
     end function;
+
+    type real_vector is array (natural range <>) of real;
+
+    function lookup(index : integer) return real is
+        constant table : real_vector := (
+            0.62, 61.62, 71.7, 17.25, 26.15, 651.6, 0.45, 5.761 );
+    begin
+        return table(index);
+    end function;
+
 begin
 
     b1: block is
@@ -101,6 +111,8 @@ begin
         signal s8  : boolean := chain2("foo", "hello");
         signal s9  : boolean := flip("1010") = "0101";
         signal s10 : boolean := flip("1010") = "0111";
+        signal s11 : real := lookup(0);  -- 0.62;
+        signal s12 : real := lookup(2);  -- 71.7;
     begin
     end block;
 
