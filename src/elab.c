@@ -959,6 +959,15 @@ static tree_t elab_default_binding(tree_t inst, lib_t *new_lib,
    return arch;
 }
 
+static void elab_free_maps(map_list_t *maps)
+{
+   while (maps != NULL) {
+      map_list_t *tmp = maps->next;
+      free(maps);
+      maps = tmp;
+   }
+}
+
 static void elab_instance(tree_t t, const elab_ctx_t *ctx)
 {
    lib_t new_lib = NULL;
@@ -1006,16 +1015,15 @@ static void elab_instance(tree_t t, const elab_ctx_t *ctx)
    elab_copy_context(entity, &new_ctx);
    elab_decls(entity, &new_ctx);
 
+   elab_map_nets(maps);
+   elab_free_maps(maps);
+
    elab_funcs(arch, entity, ctx);
    fold(arch);
+   bounds_check(arch);
 
-   elab_map_nets(maps);
-
-   while (maps != NULL) {
-      map_list_t *tmp = maps->next;
-      free(maps);
-      maps = tmp;
-   }
+   if (eval_errors() > 0 || bounds_errors() > 0)
+      return;
 
    elab_arch(arch, &new_ctx);
 }
@@ -1181,6 +1189,9 @@ static void elab_for_generate(tree_t t, elab_ctx_t *ctx)
       };
       tree_rewrite(copy, rewrite_refs, &params);
       fold(copy);
+
+      if (eval_errors() > 0)
+         break;
 
       ident_t npath = hpathf(ctx->path, '\0', "[%"PRIi64"]", i);
       ident_t ninst = hpathf(ctx->inst, '\0', "[%"PRIi64"]", i);
@@ -1439,6 +1450,9 @@ static void elab_entity_arch(tree_t t, tree_t arch, const elab_ctx_t *ctx)
    fold(arch);
    bounds_check(arch);
 
+   if (bounds_errors() > 0 || eval_errors() > 0)
+      return;
+
    elab_ctx_t new_ctx = {
       .out      = ctx->out,
       .path     = npath,
@@ -1645,7 +1659,7 @@ tree_t elab(tree_t top)
 
    elab_context_signals(&ctx);
 
-   if (errors > 0)
+   if (errors > 0 || eval_errors() > 0)
       return NULL;
 
    tree_add_attr_int(e, nnets_i, next_net);

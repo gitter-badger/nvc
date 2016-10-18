@@ -38,6 +38,7 @@ typedef enum {
 } value_kind_t;
 
 typedef struct value value_t;
+typedef struct context context_t;
 
 typedef struct {
    struct {
@@ -59,9 +60,14 @@ struct value {
    };
 };
 
+struct context {
+   context_t *parent;
+   value_t   *regs;
+   value_t   *vars;
+};
+
 typedef struct {
-   value_t     *regs;
-   value_t     *vars;
+   context_t   *context;
    int          result;
    tree_t       fcall;
    eval_flags_t flags;
@@ -74,6 +80,8 @@ typedef struct {
       if (state->flags & EVAL_WARN)                                     \
          warn_at(tree_loc(t), __VA_ARGS__);                             \
    } while (0)
+
+static int errors = 0;
 
 static void eval_vcode(eval_state_t *state);
 
@@ -88,8 +96,11 @@ static bool eval_possible(tree_t t, eval_flags_t flags)
          const int nparams = tree_params(t);
          for (int i = 0; i < nparams; i++) {
             tree_t p = tree_value(tree_param(t, i));
-            if (!eval_possible(p, flags))
-                return false;
+            if ((flags & EVAL_FOLDING) && tree_kind(p) == T_FCALL
+                && type_is_scalar(tree_type(p)))
+               return false;   // Would have been folded already if possible
+            else if (!eval_possible(p, flags))
+               return false;
          }
 
          return true;
@@ -140,24 +151,103 @@ static void *eval_alloc(size_t nbytes, eval_state_t *state)
    return ptr;
 }
 
+static context_t *eval_new_context(eval_state_t *state)
+{
+   const int nregs = vcode_count_regs();
+   const int nvars = vcode_count_vars();
+
+   void *mem = xcalloc(sizeof(context_t) + sizeof(value_t) * (nregs + nvars));
+
+   context_t *context = mem;
+   context->regs = (value_t *)((uint8_t *)mem + sizeof(context_t));
+   context->vars = (value_t *)
+      ((uint8_t *)mem + sizeof(context_t) + (nregs * sizeof(value_t)));
+
+   for (int i = 0; i < nvars; i++) {
+      vcode_var_t var = vcode_var_handle(i);
+      vcode_type_t type = vcode_var_type(var);
+      switch (vtype_kind(type)) {
+      case VCODE_TYPE_CARRAY:
+         context->vars[i].kind = VALUE_CARRAY;
+         context->vars[i].pointer =
+            eval_alloc(sizeof(value_t) * vtype_size(type), state);
+         break;
+
+      case VCODE_TYPE_INT:
+         context->vars[i].kind = VALUE_INTEGER;
+         context->vars[i].integer = 0;
+         break;
+
+      case VCODE_TYPE_REAL:
+         context->vars[i].kind = VALUE_REAL;
+         context->vars[i].real = 0;
+         break;
+
+      default:
+         EVAL_WARN(state->fcall, "cannot evaluate variables with type %d",
+                   vtype_kind(type));
+      }
+   }
+
+   return context;
+}
+
+static void eval_free_context(context_t *context)
+{
+   if (context->parent)
+      eval_free_context(context->parent);
+
+   context->regs = NULL;
+   context->vars = NULL;
+   free(context);
+}
+
 static value_t *eval_get_reg(vcode_reg_t reg, eval_state_t *state)
 {
-   return &(state->regs[reg]);
+   return &(state->context->regs[reg]);
 }
 
 static value_t *eval_get_var(vcode_var_t var, eval_state_t *state)
 {
-   if (vcode_var_context(var) == vcode_unit_depth())
-      return &(state->vars[vcode_var_index(var)]);
-   else {
-      // TODO: implement this
-      state->failed = true;
-      static value_t dummy = {
-         .kind = VALUE_INTEGER,
-         .integer = 0
-      };
-      return &dummy;
+   const int var_depth = vcode_var_context(var);
+
+   context_t *context = state->context;
+   for (int depth = vcode_unit_depth(); depth > var_depth; depth--) {
+      if (context->parent == NULL) {
+         vcode_state_t vcode_state;
+         vcode_state_save(&vcode_state);
+
+         vcode_select_unit(vcode_unit_context());
+         assert(vcode_unit_kind() == VCODE_UNIT_CONTEXT);
+
+         context_t *new_context = eval_new_context(state);
+         context->parent = new_context;
+
+         eval_state_t new_state = {
+            .context = new_context,
+            .result  = -1,
+            .fcall   = state->fcall,
+            .failed  = false,
+            .flags   = state->flags | EVAL_BOUNDS,
+            .heap    = state->heap,
+            .halloc  = state->halloc
+         };
+
+         vcode_state_restore(&vcode_state);
+
+         state->heap = new_state.heap;
+         state->halloc = new_state.halloc;
+
+         if (new_state.failed) {
+            state->failed = true;
+            return NULL;
+         }
+      }
+
+      context = context->parent;
    }
+
+   return &(context->vars[vcode_var_index(var)]);
 }
 
 static int eval_value_cmp(value_t *lhs, value_t *rhs)
@@ -511,45 +601,17 @@ static void eval_op_fcall(int op, eval_state_t *state)
    vcode_select_unit(vcode);
    vcode_select_block(0);
 
-   value_t *regs LOCAL = xcalloc(sizeof(value_t) * vcode_count_regs());
+   context_t *context = eval_new_context(state);
+
    for (int i = 0; i < nparams; i++)
-      regs[i] = *params[i];
-
-   const int nvars = vcode_count_vars();
-   value_t *vars LOCAL = xcalloc(sizeof(value_t) * nvars);
-   for (int i = 0; i < nvars; i++) {
-      vcode_var_t var = vcode_var_handle(i);
-      vcode_type_t type = vcode_var_type(var);
-      switch (vtype_kind(type)) {
-      case VCODE_TYPE_CARRAY:
-         vars[i].kind = VALUE_CARRAY;
-         vars[i].pointer =
-            eval_alloc(sizeof(value_t) * vtype_size(type), state);
-         break;
-
-      case VCODE_TYPE_INT:
-         vars[i].kind = VALUE_INTEGER;
-         vars[i].integer = 0;
-         break;
-
-      case VCODE_TYPE_REAL:
-         vars[i].kind = VALUE_REAL;
-         vars[i].real = 0;
-         break;
-
-      default:
-         EVAL_WARN(state->fcall, "cannot evaluate variables with type %d",
-                   vtype_kind(type));
-      }
-   }
+      context->regs[i] = *params[i];
 
    eval_state_t new = {
-      .regs   = regs,
-      .vars   = vars,
-      .result = -1,
-      .fcall  = state->fcall,
-      .failed = false,
-      .flags  = state->flags | EVAL_BOUNDS
+      .context = context,
+      .result  = -1,
+      .fcall   = state->fcall,
+      .failed  = false,
+      .flags   = state->flags | EVAL_BOUNDS
    };
 
    eval_vcode(&new);
@@ -561,19 +623,21 @@ static void eval_op_fcall(int op, eval_state_t *state)
    else {
       assert(new.result != -1);
       value_t *dst = eval_get_reg(vcode_get_result(op), state);
-      *dst = regs[new.result];
+      *dst = context->regs[new.result];
 
       if (state->flags & EVAL_VERBOSE) {
          const char *name = istr(vcode_get_func(op));
          const char *nest = istr(tree_ident(state->fcall));
-         if (regs[new.result].kind == VALUE_INTEGER)
+         if (context->regs[new.result].kind == VALUE_INTEGER)
             notef("%s (in %s) returned %"PRIi64, name, nest,
-                  regs[new.result].integer);
+                  context->regs[new.result].integer);
          else
             notef("%s (in %s) returned %lf", name, nest,
-                  regs[new.result].real);
+                  context->regs[new.result].real);
       }
    }
+
+   eval_free_context(context);
 }
 
 static void eval_op_bounds(int op, eval_state_t *state)
@@ -588,8 +652,32 @@ static void eval_op_bounds(int op, eval_state_t *state)
          const int64_t high = vtype_high(bounds);
          if (low > high)
             break;
-         else if (reg->integer < low || reg->integer > high)
+         else if (reg->integer < low || reg->integer > high) {
+            if (state->flags & EVAL_BOUNDS) {
+               const loc_t *loc = tree_loc(vcode_get_bookmark(op).tree);
+
+               switch ((bounds_kind_t)vcode_get_subkind(op)) {
+               case BOUNDS_ARRAY_TO:
+                  error_at(loc, "array index %"PRIi64" outside bounds %"PRIi64
+                           " to %"PRIi64, reg->integer, low, high);
+                  break;
+
+               case BOUNDS_ARRAY_DOWNTO:
+                  error_at(loc, "array index %"PRIi64" outside bounds %"PRIi64
+                           " downto %"PRIi64, reg->integer, high, low);
+                  break;
+
+               default:
+                  fatal_trace("unhandled bounds kind %d in %s",
+                              vcode_get_subkind(op), __func__);
+               }
+
+               errors++;
+               note_at(tree_loc(state->fcall), "while evaluating call to %s",
+                       istr(tree_ident(state->fcall)));
+            }
             state->failed = true;
+         }
       }
       break;
 
@@ -674,7 +762,8 @@ static void eval_op_store(int op, eval_state_t *state)
    value_t *src = eval_get_reg(vcode_get_arg(op, 0), state);
    value_t *var = eval_get_var(vcode_get_address(op), state);
 
-   *var = *src;
+   if (var != NULL)
+      *var = *src;
 }
 
 static void eval_op_load(int op, eval_state_t *state)
@@ -682,7 +771,8 @@ static void eval_op_load(int op, eval_state_t *state)
    value_t *dst = eval_get_reg(vcode_get_result(op), state);
    value_t *var = eval_get_var(vcode_get_address(op), state);
 
-   *dst = *var;
+   if (var != NULL)
+      *dst = *var;
 }
 
 static void eval_op_unwrap(int op, eval_state_t *state)
@@ -797,6 +887,9 @@ static void eval_op_nested_fcall(int op, eval_state_t *state)
 static void eval_op_index(int op, eval_state_t *state)
 {
    value_t *value = eval_get_var(vcode_get_address(op), state);
+   if (value == NULL)
+      return;
+
    assert(value->kind == VALUE_CARRAY);
 
    value_t *dst = eval_get_reg(vcode_get_result(op), state);
@@ -1118,7 +1211,7 @@ tree_t eval(tree_t fcall, eval_flags_t flags)
       flags |= EVAL_VERBOSE;
 
    if (flags & EVAL_VERBOSE)
-      flags |= EVAL_WARN;
+      flags |= EVAL_WARN | EVAL_BOUNDS;
 
    vcode_unit_t thunk = lower_thunk(fcall);
    if (thunk == NULL)
@@ -1127,24 +1220,27 @@ tree_t eval(tree_t fcall, eval_flags_t flags)
    vcode_select_unit(thunk);
    vcode_select_block(0);
 
-   value_t *regs LOCAL = xcalloc(sizeof(value_t) * vcode_count_regs());
+   context_t *context = eval_new_context(NULL);
 
    eval_state_t state = {
-      .regs   = regs,
-      .result = -1,
-      .fcall  = fcall,
-      .failed = false,
-      .flags  = flags,
+      .context = context,
+      .result  = -1,
+      .fcall   = fcall,
+      .failed  = false,
+      .flags   = flags,
    };
 
    eval_vcode(&state);
    free(state.heap);
 
-   if (state.failed)
+   if (state.failed) {
+      eval_free_context(state.context);
       return fcall;
+   }
 
    assert(state.result != -1);
-   value_t result = regs[state.result];
+   value_t result = context->regs[state.result];
+   eval_free_context(state.context);
 
    if (flags & EVAL_VERBOSE) {
       const char *name = istr(tree_ident(fcall));
@@ -1167,11 +1263,16 @@ tree_t eval(tree_t fcall, eval_flags_t flags)
    }
 }
 
+int eval_errors(void)
+{
+   return errors;
+}
+
 static tree_t fold_tree_fn(tree_t t, void *context)
 {
    switch (tree_kind(t)) {
    case T_FCALL:
-      return eval(t, EVAL_LOWER | EVAL_FCALL);
+      return eval(t, EVAL_LOWER | EVAL_FCALL | EVAL_FOLDING);
 
    case T_REF:
       {

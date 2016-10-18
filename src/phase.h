@@ -27,6 +27,7 @@ typedef enum {
    EVAL_LOWER   = (1 << 3),
    EVAL_VERBOSE = (1 << 4),
    EVAL_REPORT  = (1 << 5),
+   EVAL_FOLDING = (1 << 6)
 } eval_flags_t;
 
 // Annotate types and perform other semantics checks on a tree.
@@ -38,6 +39,9 @@ int sem_errors(void);
 
 // Fold all constant expressions
 void fold(tree_t top);
+
+// The number of errors found while constant folding
+int eval_errors(void);
 
 // Rewrite to simpler forms
 void simplify(tree_t top);
