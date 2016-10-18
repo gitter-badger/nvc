@@ -25,6 +25,7 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <inttypes.h>
+#include <math.h>
 
 #define MAX_DIMS  4
 #define EVAL_HEAP (4 * 1024)
@@ -258,7 +259,15 @@ static int eval_value_cmp(value_t *lhs, value_t *rhs)
       return lhs->integer - rhs->integer;
 
    case VALUE_REAL:
-      return lhs->real - rhs->real;
+      {
+         const double diff = lhs->real - rhs->real;
+         if (diff < 0.0)
+            return -1;
+         else if (diff > 0.0)
+            return 1;
+         else
+            return 0;
+      }
 
    case VALUE_POINTER:
       return lhs->pointer - rhs->pointer;
@@ -546,6 +555,27 @@ static void eval_op_neg(int op, eval_state_t *state)
    case VALUE_REAL:
       dst->kind = VALUE_REAL;
       dst->real = -(src->real);
+      break;
+
+   default:
+      fatal_trace("invalid value type in %s", __func__);
+   }
+}
+
+static void eval_op_abs(int op, eval_state_t *state)
+{
+   value_t *dst = eval_get_reg(vcode_get_result(op), state);
+   value_t *src = eval_get_reg(vcode_get_arg(op, 0), state);
+
+   switch (src->kind) {
+   case VALUE_INTEGER:
+      dst->kind    = VALUE_INTEGER;
+      dst->integer = llabs(src->integer);
+      break;
+
+   case VALUE_REAL:
+      dst->kind = VALUE_REAL;
+      dst->real = fabs(src->real);
       break;
 
    default:
@@ -1187,6 +1217,10 @@ static void eval_vcode(eval_state_t *state)
 
       case VCODE_OP_INDEX_CHECK:
          eval_op_index_check(i, state);
+         break;
+
+      case VCODE_OP_ABS:
+         eval_op_abs(i, state);
          break;
 
       default:

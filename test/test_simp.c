@@ -301,6 +301,9 @@ START_TEST(test_ffold)
    fail_unless(folded_b(tree_value(tree_decl(b, 9)), false));
    fail_unless(folded_r(tree_value(tree_decl(b, 10)), 0.62));
    fail_unless(folded_r(tree_value(tree_decl(b, 11)), 71.7));
+   fail_unless(folded_b(tree_value(tree_decl(b, 12)), true));
+   fail_unless(folded_b(tree_value(tree_decl(b, 13)), true));
+   fail_unless(folded_b(tree_value(tree_decl(b, 14)), false));
 }
 END_TEST
 

@@ -103,22 +103,29 @@ architecture a of ffold is
     begin
         return r;
     end function;
+
+    function approx(x, y : real; t : real := 0.001) return boolean is
+    begin
+        return abs(x - y) < t;
+    end function;
 begin
 
     b1: block is
-        signal s1  : integer := add1(5);
-        signal s2  : integer := add4(1);
-        signal s3  : integer := log2(11);
-        signal s4  : integer := log2(integer(real'(5.5)));
-        signal s5  : integer := case1(1);
-        signal s6  : integer := case1(7);
-        signal s7  : integer := adddef;
-        signal s8  : boolean := chain2("foo", "hello");
-        signal s9  : boolean := flip("1010") = "0101";
-        signal s10 : boolean := flip("1010") = "0111";
-        signal s11 : real := lookup(0);  -- 0.62;
-        signal s12 : real := lookup(2);  -- 71.7;
-        signal s13 : boolean := get_bitvec(1, 2) = "00";
+        signal s0  : integer := add1(5);
+        signal s1  : integer := add4(1);
+        signal s2  : integer := log2(11);
+        signal s3  : integer := log2(integer(real'(5.5)));
+        signal s4  : integer := case1(1);
+        signal s5  : integer := case1(7);
+        signal s6  : integer := adddef;
+        signal s7  : boolean := chain2("foo", "hello");
+        signal s8  : boolean := flip("1010") = "0101";
+        signal s9  : boolean := flip("1010") = "0111";
+        signal s10 : real := lookup(0);  -- 0.62;
+        signal s11 : real := lookup(2);  -- 71.7;
+        signal s12 : boolean := get_bitvec(1, 2) = "00";
+        signal s13 : boolean := approx(1.0000, 1.0001);
+        signal s14 : boolean := approx(1.0000, 1.01);
     begin
     end block;
 
