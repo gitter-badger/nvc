@@ -19,6 +19,7 @@
 #include "vcode.h"
 #include "array.h"
 #include "hash.h"
+#include "tree.h"
 
 #include <assert.h>
 #include <inttypes.h>
@@ -814,7 +815,7 @@ uint32_t vcode_get_index(int op)
           || o->kind == VCODE_OP_VALUE || o->kind == VCODE_OP_BOUNDS
           || o->kind == VCODE_OP_DYNAMIC_BOUNDS
           || o->kind == VCODE_OP_ARRAY_SIZE || o->kind == VCODE_OP_INDEX_CHECK);
-   return o->bookmark.index;
+   return tree_index(o->bookmark.tree);
 }
 
 uint32_t vcode_get_hint(int op)
@@ -823,7 +824,7 @@ uint32_t vcode_get_hint(int op)
    assert(o->kind == VCODE_OP_BOUNDS
           || o->kind == VCODE_OP_DYNAMIC_BOUNDS
           || o->kind == VCODE_OP_INDEX_CHECK);
-   return o->hint.index;
+   return tree_index(o->hint.tree);
 }
 
 vcode_block_t vcode_get_target(int op, int nth)
@@ -1905,14 +1906,15 @@ void vcode_dump(void)
 
          case VCODE_OP_COVER_STMT:
             {
-               printf("%s %u", vcode_op_string(op->kind), op->bookmark.index);
+               printf("%s %u", vcode_op_string(op->kind),
+                      tree_index(op->bookmark.tree));
             }
             break;
 
          case VCODE_OP_COVER_COND:
             {
                printf("%s %u sub %u ", vcode_op_string(op->kind),
-                      op->bookmark.index, op->subkind);
+                      tree_index(op->bookmark.tree), op->subkind);
                vcode_dump_reg(op->args.items[0]);
             }
             break;

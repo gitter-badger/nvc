@@ -169,8 +169,7 @@ typedef struct {
 } vcode_state_t;
 
 typedef struct {
-   uint32_t index;
-   loc_t    loc;
+   tree_t tree;
 } vcode_bookmark_t;
 
 #define VCODE_INVALID_REG    -1

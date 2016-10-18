@@ -490,8 +490,7 @@ static vcode_reg_t lower_wrap(type_t type, vcode_reg_t data)
 static vcode_bookmark_t lower_bookmark(tree_t where)
 {
    vcode_bookmark_t b = {
-      .loc = *tree_loc(where),
-      .index = tree_has_index(where) ? tree_index(where) : UINT32_MAX
+      .tree = where
    };
 
    return b;
