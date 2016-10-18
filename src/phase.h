@@ -26,6 +26,7 @@ typedef enum {
    EVAL_WARN    = (1 << 2),
    EVAL_LOWER   = (1 << 3),
    EVAL_VERBOSE = (1 << 4),
+   EVAL_REPORT  = (1 << 5),
 } eval_flags_t;
 
 // Annotate types and perform other semantics checks on a tree.

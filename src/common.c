@@ -46,7 +46,7 @@ int64_t assume_int(tree_t t)
    case T_FCALL:
       {
          const eval_flags_t flags =
-            EVAL_FCALL | EVAL_BOUNDS | EVAL_WARN | EVAL_LOWER;
+            EVAL_FCALL | EVAL_BOUNDS | EVAL_WARN | EVAL_LOWER | EVAL_REPORT;
          tree_t new = eval(t, flags);
          const tree_kind_t new_kind = tree_kind(new);
          if (new_kind == T_LITERAL || new_kind == T_REF)

@@ -178,6 +178,37 @@ static int eval_value_cmp(value_t *lhs, value_t *rhs)
    }
 }
 
+static void eval_message(value_t *text, value_t *length, value_t *severity,
+                         const loc_t *loc, const char *prefix)
+{
+   const char *levels[] = {
+      "Note", "Warning", "Error", "Failure"
+   };
+
+   assert(text->kind == VALUE_POINTER);
+
+   char *copy = NULL ;
+   if (length->integer > 0) {
+      copy = xmalloc(length->integer + 1);
+      for (int i = 0; i < length->integer; i++)
+         copy[i] = text->pointer[i].integer;
+      copy[length->integer] = '\0';
+   }
+
+   void (*fn)(const loc_t *loc, const char *fmt, ...) = fatal_at;
+
+   switch (severity->integer) {
+   case SEVERITY_NOTE:    fn = note_at; break;
+   case SEVERITY_WARNING: fn = warn_at; break;
+   case SEVERITY_ERROR:
+   case SEVERITY_FAILURE: fn = error_at; break;
+   }
+
+   (*fn)(loc, "%s %s: %s", prefix, levels[severity->integer],
+         copy ?: "Assertion violation");
+   free(copy);
+}
+
 static void eval_op_const(int op, eval_state_t *state)
 {
    value_t *dst = eval_get_reg(vcode_get_result(op), state);
@@ -823,6 +854,34 @@ static void eval_op_copy(int op, eval_state_t *state)
       dst->pointer[i] = src->pointer[i];
 }
 
+static void eval_op_report(int op, eval_state_t *state)
+{
+   value_t *text = eval_get_reg(vcode_get_arg(op, 1), state);
+   value_t *length = eval_get_reg(vcode_get_arg(op, 2), state);
+   value_t *severity = eval_get_reg(vcode_get_arg(op, 0), state);
+
+   if (state->flags & EVAL_REPORT)
+      eval_message(text, length, severity,
+                   tree_loc(vcode_get_bookmark(op).tree), "Report");
+   else
+      state->failed = true;  // Cannot fold as would change runtime behaviour
+}
+
+static void eval_op_assert(int op, eval_state_t *state)
+{
+   value_t *test = eval_get_reg(vcode_get_arg(op, 0), state);
+   value_t *text = eval_get_reg(vcode_get_arg(op, 2), state);
+   value_t *length = eval_get_reg(vcode_get_arg(op, 3), state);
+   value_t *severity = eval_get_reg(vcode_get_arg(op, 1), state);
+
+   if (test->integer == 0) {
+      if (state->flags & EVAL_REPORT)
+         eval_message(text, length, severity,
+                      tree_loc(vcode_get_bookmark(op).tree), "Assertion");
+      state->failed = severity->integer >= SEVERITY_ERROR;
+   }
+}
+
 static void eval_vcode(eval_state_t *state)
 {
    const int nops = vcode_count_ops();
@@ -968,6 +1027,14 @@ static void eval_vcode(eval_state_t *state)
 
       case VCODE_OP_STORE_INDIRECT:
          eval_op_store_indirect(i, state);
+         break;
+
+      case VCODE_OP_REPORT:
+         eval_op_report(i, state);
+         break;
+
+      case VCODE_OP_ASSERT:
+         eval_op_assert(i, state);
          break;
 
       default:

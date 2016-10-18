@@ -806,7 +806,7 @@ uint32_t vcode_get_tag(int op)
    return o->tag;
 }
 
-uint32_t vcode_get_index(int op)
+vcode_bookmark_t vcode_get_bookmark(int op)
 {
    op_t *o = vcode_op_data(op);
    assert(o->kind == VCODE_OP_ASSERT || o->kind == VCODE_OP_REPORT
@@ -815,11 +815,18 @@ uint32_t vcode_get_index(int op)
           || o->kind == VCODE_OP_VALUE || o->kind == VCODE_OP_BOUNDS
           || o->kind == VCODE_OP_DYNAMIC_BOUNDS
           || o->kind == VCODE_OP_ARRAY_SIZE || o->kind == VCODE_OP_INDEX_CHECK);
-   return tree_index(o->bookmark.tree);
+   return o->bookmark;
+}
+
+uint32_t vcode_get_index(int op)
+{
+   // TODO: remove this?
+   return tree_index(vcode_get_bookmark(op).tree);
 }
 
 uint32_t vcode_get_hint(int op)
 {
+   // TODO: replace this with function returning bookmark?
    op_t *o = vcode_op_data(op);
    assert(o->kind == VCODE_OP_BOUNDS
           || o->kind == VCODE_OP_DYNAMIC_BOUNDS
