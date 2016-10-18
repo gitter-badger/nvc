@@ -882,6 +882,53 @@ static void eval_op_assert(int op, eval_state_t *state)
    }
 }
 
+static void eval_op_select(int op, eval_state_t *state)
+{
+   value_t *test = eval_get_reg(vcode_get_arg(op, 0), state);
+   value_t *left = eval_get_reg(vcode_get_arg(op, 1), state);
+   value_t *right = eval_get_reg(vcode_get_arg(op, 2), state);
+   value_t *result = eval_get_reg(vcode_get_result(op), state);
+
+   assert(test->kind == VALUE_INTEGER);
+
+   *result = test->integer ? *left : *right;
+}
+
+static void eval_op_alloca(int op, eval_state_t *state)
+{
+   value_t *length = eval_get_reg(vcode_get_arg(op, 0), state);
+   value_t *result = eval_get_reg(vcode_get_result(op), state);
+
+   assert(length->kind == VALUE_INTEGER);
+
+   result->kind = VALUE_POINTER;
+   result->pointer = eval_alloc(sizeof(value_t) * length->integer, state);
+}
+
+static void eval_op_index_check(int op, eval_state_t *state)
+{
+   value_t *low = eval_get_reg(vcode_get_arg(op, 0), state);
+   value_t *high = eval_get_reg(vcode_get_arg(op, 1), state);
+
+   int64_t min, max;
+   if (vcode_count_args(op) == 2) {
+      vcode_type_t bounds = vcode_get_type(op);
+      min = vtype_low(bounds);
+      max = vtype_high(bounds);
+   }
+   else {
+      min = eval_get_reg(vcode_get_arg(op, 2), state)->integer;
+      max = eval_get_reg(vcode_get_arg(op, 3), state)->integer;
+   }
+
+   if (high->integer < low->integer)
+      return;
+   else if (low->integer < min)
+      state->failed = true;    // TODO: report error here if EVAL_BOUNDS
+   else if (high->integer > max)
+      state->failed = true;
+}
+
 static void eval_vcode(eval_state_t *state)
 {
    const int nops = vcode_count_ops();
@@ -1035,6 +1082,18 @@ static void eval_vcode(eval_state_t *state)
 
       case VCODE_OP_ASSERT:
          eval_op_assert(i, state);
+         break;
+
+      case VCODE_OP_SELECT:
+         eval_op_select(i, state);
+         break;
+
+      case VCODE_OP_ALLOCA:
+         eval_op_alloca(i, state);
+         break;
+
+      case VCODE_OP_INDEX_CHECK:
+         eval_op_index_check(i, state);
          break;
 
       default:

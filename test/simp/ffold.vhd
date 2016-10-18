@@ -98,6 +98,11 @@ architecture a of ffold is
         return table(index);
     end function;
 
+    function get_bitvec(x, y : integer) return bit_vector is
+        variable r : bit_vector(x to y) := "00";
+    begin
+        return r;
+    end function;
 begin
 
     b1: block is
@@ -113,6 +118,7 @@ begin
         signal s10 : boolean := flip("1010") = "0111";
         signal s11 : real := lookup(0);  -- 0.62;
         signal s12 : real := lookup(2);  -- 71.7;
+        signal s13 : boolean := get_bitvec(1, 2) = "00";
     begin
     end block;
 
