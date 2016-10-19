@@ -1291,6 +1291,10 @@ static void eval_vcode(eval_state_t *state)
          eval_op_image(i, state);
          break;
 
+      case VCODE_OP_HEAP_SAVE:
+      case VCODE_OP_HEAP_RESTORE:
+         break;
+
       default:
          vcode_dump();
          fatal("cannot evaluate vcode op %s", vcode_op_string(vcode_get_op(i)));

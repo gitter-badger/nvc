@@ -128,6 +128,15 @@ architecture a of ffold is
     begin
         return time'image(x);
     end function;
+
+    function needs_heap(x : integer) return integer is
+    begin
+        if integer'image(x)'length = 2 then
+            return x * 2;
+        else
+            return x / 2;
+        end if;
+    end function;
 begin
 
     b1: block is
@@ -150,6 +159,7 @@ begin
         signal s16 : boolean := get_string(2.5) = "2.5";
         signal s17 : boolean := get_string('F') = "'F'";
         signal s18 : boolean := get_string(1 fs) = "1 FS";
+        signal s19 : integer := needs_heap(40);
     begin
     end block;
 

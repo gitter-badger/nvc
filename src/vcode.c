@@ -3072,6 +3072,9 @@ vcode_reg_t emit_mul(vcode_reg_t lhs, vcode_reg_t rhs)
    vtype_t *bl = vcode_type_data(vcode_reg_data(lhs)->bounds);
    vtype_t *br = vcode_type_data(vcode_reg_data(rhs)->bounds);
 
+   if (bl->kind == VCODE_TYPE_REAL)
+      return reg;
+
    const int64_t ll = smul64(bl->low, br->low);
    const int64_t lh = smul64(bl->low, br->high);
    const int64_t hl = smul64(bl->high, br->low);
@@ -3151,7 +3154,7 @@ vcode_reg_t emit_add(vcode_reg_t lhs, vcode_reg_t rhs)
    reg_t *rr = vcode_reg_data(reg);
    if (is_pointer)
       rr->bounds = vcode_reg_data(lhs)->bounds;
-   else {
+   else if (ltypek != VCODE_TYPE_REAL) {
       vtype_t *bl = vcode_type_data(vcode_reg_data(lhs)->bounds);
       vtype_t *br = vcode_type_data(vcode_reg_data(rhs)->bounds);
 
@@ -3176,14 +3179,13 @@ vcode_reg_t emit_sub(vcode_reg_t lhs, vcode_reg_t rhs)
 
    vcode_reg_t reg = emit_arith(VCODE_OP_SUB, lhs, rhs);
 
-   reg_t *rr = vcode_reg_data(reg);
-   if (vtype_kind(vcode_reg_type(reg)) == VCODE_TYPE_POINTER)
-      rr->bounds = vcode_reg_data(lhs)->bounds;
-   else {
-      vtype_t *bl = vcode_type_data(vcode_reg_data(lhs)->bounds);
-      vtype_t *br = vcode_type_data(vcode_reg_data(rhs)->bounds);
+   vtype_t *bl = vcode_type_data(vcode_reg_data(lhs)->bounds);
+   vtype_t *br = vcode_type_data(vcode_reg_data(rhs)->bounds);
 
-      reg_t *rr = vcode_reg_data(reg);
+   reg_t *rr = vcode_reg_data(reg);
+   if (bl->kind == VCODE_TYPE_POINTER || bl->kind == VCODE_TYPE_SIGNAL)
+      rr->bounds = vcode_reg_data(lhs)->bounds;
+   else if (bl->kind != VCODE_TYPE_REAL) {
       // XXX: this is wrong - see TO_UNSIGNED
       rr->bounds = vtype_int(sadd64(bl->low, -br->high),
                              sadd64(bl->high, -br->low));
