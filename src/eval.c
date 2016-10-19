@@ -1116,6 +1116,28 @@ static void eval_op_image(int op, eval_state_t *state)
    }
 }
 
+static void eval_op_uarray_left(int op, eval_state_t *state)
+{
+   value_t *array = eval_get_reg(vcode_get_arg(op, 0), state);
+   value_t *dst = eval_get_reg(vcode_get_result(op), state);
+
+   assert(array->kind == VALUE_UARRAY);
+
+   dst->kind = VALUE_INTEGER;
+   dst->integer = array->uarray->dim[vcode_get_dim(op)].left;
+}
+
+static void eval_op_uarray_right(int op, eval_state_t *state)
+{
+   value_t *array = eval_get_reg(vcode_get_arg(op, 0), state);
+   value_t *dst = eval_get_reg(vcode_get_result(op), state);
+
+   assert(array->kind == VALUE_UARRAY);
+
+   dst->kind = VALUE_INTEGER;
+   dst->integer = array->uarray->dim[vcode_get_dim(op)].right;
+}
+
 static void eval_vcode(eval_state_t *state)
 {
    const int nops = vcode_count_ops();
@@ -1293,6 +1315,14 @@ static void eval_vcode(eval_state_t *state)
 
       case VCODE_OP_HEAP_SAVE:
       case VCODE_OP_HEAP_RESTORE:
+         break;
+
+      case VCODE_OP_UARRAY_LEFT:
+         eval_op_uarray_left(i, state);
+         break;
+
+      case VCODE_OP_UARRAY_RIGHT:
+         eval_op_uarray_right(i, state);
          break;
 
       default:
