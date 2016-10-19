@@ -25,6 +25,7 @@
 #include <inttypes.h>
 #include <string.h>
 #include <stdlib.h>
+#include <float.h>
 
 DECLARE_AND_DEFINE_ARRAY(vcode_reg);
 DECLARE_AND_DEFINE_ARRAY(vcode_block);
@@ -72,6 +73,10 @@ typedef struct {
       struct {
          int64_t low;
          int64_t high;
+      };
+      struct {
+         double rlow;
+         double rhigh;
       };
       struct {
          unsigned      dims;
@@ -495,7 +500,7 @@ void vcode_opt(void)
 {
    // Prune assignments to unused registers
 
-   int *uses = xmalloc(active_unit->regs.count * sizeof(int));
+   int *uses LOCAL = xmalloc(active_unit->regs.count * sizeof(int));
 
    int pruned = 0;
    do {
@@ -564,8 +569,6 @@ void vcode_opt(void)
 
       }
    } while (pruned > 0);
-
-   free(uses);
 }
 
 void vcode_close(void)
@@ -2021,8 +2024,10 @@ bool vtype_includes(vcode_type_t type, vcode_type_t bounds)
    case VCODE_TYPE_ACCESS:
    case VCODE_TYPE_OFFSET:
    case VCODE_TYPE_FILE:
-   case VCODE_TYPE_REAL:
       return false;
+
+   case VCODE_TYPE_REAL:
+      return bt->rlow >= tt->rlow && bt->rhigh <= tt->rhigh;
 
    case VCODE_TYPE_SIGNAL:
       return vtype_includes(tt->base, bt->base);
@@ -2196,7 +2201,9 @@ vcode_type_t vtype_real(void)
    assert(active_unit != NULL);
 
    vtype_t *n = vtype_array_alloc(&(active_unit->types));
-   n->kind = VCODE_TYPE_REAL;
+   n->kind  = VCODE_TYPE_REAL;
+   n->rlow  = DBL_MIN;
+   n->rhigh = DBL_MAX;
 
    return vtype_new(n);
 }
@@ -2990,6 +2997,7 @@ void emit_store(vcode_reg_t reg, vcode_var_t var)
          other->kind = VCODE_OP_COMMENT;
          other->comment =
             xasprintf("Dead store to %s", istr(vcode_var_name(var)));
+         vcode_reg_array_resize(&(other->args), 0, VCODE_INVALID_REG);
       }
       else if (other->kind == VCODE_OP_NESTED_FCALL
                || other->kind == VCODE_OP_NESTED_PCALL)
