@@ -108,6 +108,26 @@ architecture a of ffold is
     begin
         return abs(x - y) < t;
     end function;
+
+    function get_string(x : integer) return string is
+    begin
+        return integer'image(x);
+    end function;
+
+    function get_string(x : real) return string is
+    begin
+        return real'image(x);
+    end function;
+
+    function get_string(x : character) return string is
+    begin
+        return character'image(x);
+    end function;
+
+    function get_string(x : time) return string is
+    begin
+        return time'image(x);
+    end function;
 begin
 
     b1: block is
@@ -126,6 +146,10 @@ begin
         signal s12 : boolean := get_bitvec(1, 2) = "00";
         signal s13 : boolean := approx(1.0000, 1.0001);
         signal s14 : boolean := approx(1.0000, 1.01);
+        signal s15 : boolean := get_string(5) = "5";
+        signal s16 : boolean := get_string(2.5) = "2.5";
+        signal s17 : boolean := get_string('F') = "'F'";
+        signal s18 : boolean := get_string(1 fs) = "1 FS";
     begin
     end block;
 

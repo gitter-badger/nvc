@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include <math.h>
+#include <float.h>
 
 #define MAX_DIMS  4
 #define EVAL_HEAP (4 * 1024)
@@ -97,9 +98,11 @@ static bool eval_possible(tree_t t, eval_flags_t flags)
          const int nparams = tree_params(t);
          for (int i = 0; i < nparams; i++) {
             tree_t p = tree_value(tree_param(t, i));
-            if ((flags & EVAL_FOLDING) && tree_kind(p) == T_FCALL
-                && type_is_scalar(tree_type(p)))
+            const bool fcall = tree_kind(p) == T_FCALL;
+            if ((flags & EVAL_FOLDING) && fcall && type_is_scalar(tree_type(p)))
                return false;   // Would have been folded already if possible
+            else if (fcall && !(flags & EVAL_FCALL))
+               return false;
             else if (!eval_possible(p, flags))
                return false;
          }
@@ -641,12 +644,16 @@ static void eval_op_fcall(int op, eval_state_t *state)
       .result  = -1,
       .fcall   = state->fcall,
       .failed  = false,
-      .flags   = state->flags | EVAL_BOUNDS
+      .flags   = state->flags | EVAL_BOUNDS,
+      .heap    = state->heap,
+      .halloc  = state->halloc
    };
 
    eval_vcode(&new);
    vcode_state_restore(&vcode_state);
-   free(new.heap);
+
+   state->heap = new.heap;
+   state->halloc = new.halloc;
 
    if (new.failed)
       state->failed = true;
@@ -1052,6 +1059,63 @@ static void eval_op_index_check(int op, eval_state_t *state)
       state->failed = true;
 }
 
+static void eval_op_image(int op, eval_state_t *state)
+{
+   value_t *object = eval_get_reg(vcode_get_arg(op, 0), state);
+   tree_t where = vcode_get_bookmark(op).tree;
+   type_t type = type_base_recur(tree_type(where));
+
+   char buf[32];
+   size_t len = 0;
+
+   switch (type_kind(type)) {
+   case T_INTEGER:
+      len = snprintf(buf, sizeof(buf), "%"PRIi64, object->integer);
+      break;
+
+   case T_ENUM:
+      {
+         tree_t lit = type_enum_literal(type, object->integer);
+         len = snprintf(buf, sizeof(buf), "%s", istr(tree_ident(lit)));
+      }
+      break;
+
+   case T_REAL:
+      len = snprintf(buf, sizeof(buf), "%.*g", DBL_DIG + 3, object->real);
+      break;
+
+   case T_PHYSICAL:
+      {
+         tree_t unit = type_unit(type, 0);
+         len = snprintf(buf, sizeof(buf), "%"PRIi64" %s", object->integer,
+                        istr(tree_ident(unit)));
+      }
+      break;
+
+   default:
+      error_at(tree_loc(where), "cannot use 'IMAGE with this type");
+      state->failed = true;
+      return;
+   }
+
+   value_t *dst = eval_get_reg(vcode_get_result(op), state);
+   if ((dst->uarray = eval_alloc(sizeof(uarray_t), state)) == NULL)
+      return;
+   if ((dst->uarray->data = eval_alloc(sizeof(value_t) * len, state)) == NULL)
+      return;
+
+   dst->uarray->ndims = 1;
+   dst->uarray->dim[0].left  = 1;
+   dst->uarray->dim[0].right = len;
+   dst->uarray->dim[0].dir   = RANGE_TO;
+
+   for (size_t i = 0; i < len; i++) {
+      value_t *ch = &(dst->uarray->data[i]);
+      ch->kind = VALUE_INTEGER;
+      ch->integer = buf[i];
+   }
+}
+
 static void eval_vcode(eval_state_t *state)
 {
    const int nops = vcode_count_ops();
@@ -1221,6 +1285,10 @@ static void eval_vcode(eval_state_t *state)
 
       case VCODE_OP_ABS:
          eval_op_abs(i, state);
+         break;
+
+      case VCODE_OP_IMAGE:
+         eval_op_image(i, state);
          break;
 
       default:
