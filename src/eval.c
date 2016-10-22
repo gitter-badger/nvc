@@ -497,6 +497,16 @@ static void eval_op_rem(int op, eval_state_t *state)
    }
 }
 
+static void eval_op_exp(int op, eval_state_t *state)
+{
+   value_t *dst = eval_get_reg(vcode_get_result(op), state);
+   value_t *lhs = eval_get_reg(vcode_get_arg(op, 0), state);
+   value_t *rhs = eval_get_reg(vcode_get_arg(op, 1), state);
+
+   dst->kind = VALUE_REAL;
+   dst->real = pow(lhs->real, rhs->real);
+}
+
 static void eval_op_cmp(int op, eval_state_t *state)
 {
    value_t *dst = eval_get_reg(vcode_get_result(op), state);
@@ -1360,6 +1370,10 @@ static void eval_vcode(eval_state_t *state)
 
       case VCODE_OP_UARRAY_DIR:
          eval_op_uarray_dir(i, state);
+         break;
+
+      case VCODE_OP_EXP:
+         eval_op_exp(i, state);
          break;
 
       default:

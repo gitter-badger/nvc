@@ -139,6 +139,7 @@ START_TEST(test_cfold)
    fail_unless(folded_r(tree_value(tree_stmt(p, 0)), 3.0));
    fail_unless(folded_r(tree_value(tree_stmt(p, 1)), 0.6));
    fail_unless(folded_r(tree_value(tree_stmt(p, 2)), 2.5));
+   fail_unless(folded_r(tree_value(tree_stmt(p, 3)), 16.0));
 
    p = tree_stmt(a, 7);
    fail_unless(folded_b(tree_value(tree_stmt(p, 0)), true));

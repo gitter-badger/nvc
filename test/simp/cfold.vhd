@@ -107,6 +107,7 @@ begin
         r := 1.5 * 2;
         r := 3 * 0.2;
         r := 5.0 / 2;
+        r := 2.0 ** 4;
     end process;
 
     process is
