@@ -32,6 +32,7 @@
 #define EVAL_HEAP (4 * 1024)
 
 typedef enum {
+   VALUE_INVALID,
    VALUE_REAL,
    VALUE_INTEGER,
    VALUE_POINTER,
@@ -111,8 +112,10 @@ static bool eval_possible(tree_t t, eval_flags_t flags)
       }
 
    case T_LITERAL:
-   case T_TYPE_CONV:
       return true;
+
+   case T_TYPE_CONV:
+      return eval_possible(tree_value(tree_param(t, 0)), flags);
 
    case T_REF:
       {
@@ -187,9 +190,14 @@ static context_t *eval_new_context(eval_state_t *state)
          context->vars[i].real = 0;
          break;
 
+      case VCODE_TYPE_UARRAY:
+         context->vars[i].kind = VALUE_UARRAY;
+         context->vars[i].uarray = NULL;
+         break;
+
       default:
-         EVAL_WARN(state->fcall, "cannot evaluate variables with type %d",
-                   vtype_kind(type));
+         fatal_at(tree_loc(state->fcall), "cannot evaluate variables with "
+                  "type %d", vtype_kind(type));
       }
    }
 
@@ -213,16 +221,24 @@ static value_t *eval_get_reg(vcode_reg_t reg, eval_state_t *state)
 
 static value_t *eval_get_var(vcode_var_t var, eval_state_t *state)
 {
+   if (vcode_var_extern(var)) {
+      state->failed = true;
+      return NULL;
+   }
+
    const int var_depth = vcode_var_context(var);
 
    context_t *context = state->context;
    for (int depth = vcode_unit_depth(); depth > var_depth; depth--) {
       if (context->parent == NULL) {
+         assert(vcode_unit_kind() != VCODE_UNIT_THUNK);
+
          vcode_state_t vcode_state;
          vcode_state_save(&vcode_state);
 
          vcode_select_unit(vcode_unit_context());
          assert(vcode_unit_kind() == VCODE_UNIT_CONTEXT);
+         vcode_select_block(0);
 
          context_t *new_context = eval_new_context(state);
          context->parent = new_context;
@@ -237,6 +253,7 @@ static value_t *eval_get_var(vcode_var_t var, eval_state_t *state)
             .halloc  = state->halloc
          };
 
+         eval_vcode(&new_state);
          vcode_state_restore(&vcode_state);
 
          state->heap = new_state.heap;
@@ -837,6 +854,18 @@ static void eval_op_uarray_len(int op, eval_state_t *state)
    dst->integer = MAX(len, 0);
 }
 
+static void eval_op_uarray_dir(int op, eval_state_t *state)
+{
+   value_t *dst = eval_get_reg(vcode_get_result(op), state);
+   value_t *src = eval_get_reg(vcode_get_arg(op, 0), state);
+
+   const int dim = vcode_get_dim(op);
+   const range_kind_t dir = src->uarray->dim[dim].dir;
+
+   dst->kind    = VALUE_INTEGER;
+   dst->integer = dir;
+}
+
 static void eval_op_memcmp(int op, eval_state_t *state)
 {
    value_t *dst = eval_get_reg(vcode_get_result(op), state);
@@ -1026,13 +1055,17 @@ static void eval_op_select(int op, eval_state_t *state)
 
 static void eval_op_alloca(int op, eval_state_t *state)
 {
-   value_t *length = eval_get_reg(vcode_get_arg(op, 0), state);
    value_t *result = eval_get_reg(vcode_get_result(op), state);
 
-   assert(length->kind == VALUE_INTEGER);
+   int length = 1;
+   if (vcode_count_args(op) > 0) {
+      value_t *length_reg = eval_get_reg(vcode_get_arg(op, 0), state);
+      assert(length_reg->kind == VALUE_INTEGER);
+      length = length_reg->integer;
+   }
 
    result->kind = VALUE_POINTER;
-   result->pointer = eval_alloc(sizeof(value_t) * length->integer, state);
+   result->pointer = eval_alloc(sizeof(value_t) * length, state);
 }
 
 static void eval_op_index_check(int op, eval_state_t *state)
@@ -1323,6 +1356,10 @@ static void eval_vcode(eval_state_t *state)
 
       case VCODE_OP_UARRAY_RIGHT:
          eval_op_uarray_right(i, state);
+         break;
+
+      case VCODE_OP_UARRAY_DIR:
+         eval_op_uarray_dir(i, state);
          break;
 
       default:

@@ -23,6 +23,7 @@ typedef struct {
    int           field;
    int           subkind;
    uint32_t      tag;
+   double        real;
 } check_bb_t;
 
 #define CAT(x, y) x##y
@@ -79,6 +80,14 @@ static void check_bb(int bb, const check_bb_t *expect, int len)
             vcode_dump();
             fail("expected op %d in block %d to have constant %d but has %d",
                  i, bb, e->value, vcode_get_value(i));
+         }
+         break;
+
+      case VCODE_OP_CONST_REAL:
+         if (e->real != vcode_get_real(i)) {
+            vcode_dump();
+            fail("expected op %d in block %d to have constant %lf but has %lf",
+                 i, bb, e->real, vcode_get_real(i));
          }
          break;
 
@@ -2465,16 +2474,33 @@ START_TEST(test_real1)
    tree_t e = run_elab();
    lower_unit(e);
 
-   vcode_unit_t v0 = tree_code(tree_decl(e, 1));
-   vcode_select_unit(v0);
+   {
+      vcode_unit_t v0 = tree_code(tree_decl(e, 1));
+      vcode_select_unit(v0);
 
-   EXPECT_BB(0) = {
-      { VCODE_OP_NEG },
-      { VCODE_OP_STORE, .name = "R" },
-      { VCODE_OP_RETURN }
-   };
+      EXPECT_BB(0) = {
+         { VCODE_OP_NEG },
+         { VCODE_OP_STORE, .name = "R" },
+         { VCODE_OP_RETURN }
+      };
 
-   CHECK_BB(0);
+      CHECK_BB(0);
+   }
+
+   {
+      vcode_unit_t v0 = tree_code(tree_decl(e, 2));
+      vcode_select_unit(v0);
+
+      EXPECT_BB(0) = {
+         { VCODE_OP_STORE, .name = "Z" },
+         { VCODE_OP_CAST },
+         { VCODE_OP_CONST_REAL, .real = 0.5 },
+         { VCODE_OP_MUL },
+         { VCODE_OP_RETURN }
+      };
+
+      CHECK_BB(0);
+   }
 }
 END_TEST
 

@@ -1476,6 +1476,8 @@ static vcode_reg_t lower_var_ref(tree_t decl, expr_ctx_t ctx)
    type_t type = tree_type(decl);
 
    vcode_var_t var = lower_get_var(decl);
+   // TODO: if lowering a thunk should return undefined if extern and
+   //       remove check code in eval_get_var
    if (var == VCODE_INVALID_VAR)
       return lower_protected_var(decl);
    else if (type_is_array(type) && lower_const_bounds(type))

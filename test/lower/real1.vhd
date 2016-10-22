@@ -10,6 +10,13 @@ architecture test of real1 is
         return r;
     end function;
 
+    function cast_mul(x : integer) return real is
+        variable z : integer;
+    begin
+        z := x;
+        return real(z) * 0.5;
+    end function;
+
 begin
 
 end architecture;
