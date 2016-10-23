@@ -24,7 +24,6 @@ typedef enum {
    EVAL_BOUNDS  = (1 << 0),
    EVAL_FCALL   = (1 << 1),
    EVAL_WARN    = (1 << 2),
-   EVAL_LOWER   = (1 << 3),
    EVAL_VERBOSE = (1 << 4),
    EVAL_REPORT  = (1 << 5),
    EVAL_FOLDING = (1 << 6)

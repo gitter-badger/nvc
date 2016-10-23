@@ -229,6 +229,9 @@ vcode_unit_t vcode_active_unit(void);
 vcode_unit_t vcode_unit_context(void);
 void vcode_rewind(void);
 
+void vcode_write(vcode_unit_t unit, fbuf_t *fbuf);
+void vcode_read(fbuf_t *fbuf, tree_rd_ctx_t tree_ctx);
+
 void vcode_state_save(vcode_state_t *state);
 void vcode_state_restore(const vcode_state_t *state);
 
@@ -425,6 +428,5 @@ void emit_cover_cond(vcode_reg_t test, uint32_t tag, unsigned sub);
 vcode_reg_t emit_heap_save(void);
 void emit_heap_restore(vcode_reg_t reg);
 vcode_reg_t emit_undefined(vcode_type_t type);
-void vcode_write(vcode_unit_t unit, fbuf_t *fbuf);
 
 #endif  // _VCODE_H

@@ -287,10 +287,11 @@ ident_t ident_read(ident_rd_ctx_t ctx)
          return p;
       }
    }
-   else {
-      assert(index < ctx->cache_sz);
+   else if (likely(index < ctx->cache_sz))
       return ctx->cache[index];
-   }
+   else
+      fatal("ident index in %s is corrupt: index=%d cache_sz=%d",
+            fbuf_file_name(ctx->file), index, (int)ctx->cache_sz);
 }
 
 ident_t ident_uniq(const char *prefix)

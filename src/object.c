@@ -777,13 +777,13 @@ object_t *object_read(object_rd_ctx_t *ctx, int tag)
             object->items[n].tree = (tree_t)object_read(ctx, OBJECT_TAG_TYPE);
          else if (ITEM_TREE_ARRAY & mask) {
             tree_array_t *a = &(object->items[n].tree_array);
-            tree_array_resize(a, read_u32(ctx->file), NULL);
+            tree_array_resize(a, read_u32(ctx->file), 0);
             for (unsigned i = 0; i < a->count; i++)
                a->items[i] = (tree_t)object_read(ctx, OBJECT_TAG_TREE);
          }
          else if (ITEM_TYPE_ARRAY & mask) {
             type_array_t *a = &(object->items[n].type_array);
-            type_array_resize(a, read_u16(ctx->file), NULL);
+            type_array_resize(a, read_u16(ctx->file), 0);
             for (unsigned i = 0; i < a->count; i++)
                a->items[i] = (type_t)object_read(ctx, OBJECT_TAG_TYPE);
          }
@@ -804,8 +804,7 @@ object_t *object_read(object_rd_ctx_t *ctx, int tag)
          }
          else if (ITEM_RANGE_ARRAY & mask) {
             range_array_t *a = &(object->items[n].range_array);
-            range_t dummy = { NULL, NULL, 0 };
-            range_array_resize(a, read_u16(ctx->file), dummy);
+            range_array_resize(a, read_u16(ctx->file), 0);
 
             for (unsigned i = 0; i < a->count; i++) {
                a->items[i].kind  = read_u8(ctx->file);
@@ -819,7 +818,7 @@ object_t *object_read(object_rd_ctx_t *ctx, int tag)
             ;
          else if (ITEM_NETID_ARRAY & mask) {
             netid_array_t *a = &(object->items[n].netid_array);
-            netid_array_resize(a, read_u32(ctx->file), NETID_INVALID);
+            netid_array_resize(a, read_u32(ctx->file), 0xff);
             for (unsigned i = 0; i < a->count; i++)
                a->items[i] = read_u32(ctx->file);
          }
@@ -1090,7 +1089,7 @@ object_t *object_copy_sweep(object_t *object, object_copy_ctx_t *ctx)
             const tree_array_t *from = &(object->items[n].tree_array);
             tree_array_t *to = &(copy->items[n].tree_array);
 
-            tree_array_resize(to, from->count, NULL);
+            tree_array_resize(to, from->count, 0);
 
             for (size_t i = 0; i < from->count; i++)
                to->items[i] = (tree_t)
@@ -1116,7 +1115,7 @@ object_t *object_copy_sweep(object_t *object, object_copy_ctx_t *ctx)
             const netid_array_t *from = &(object->items[n].netid_array);
             netid_array_t *to = &(copy->items[n].netid_array);
 
-            netid_array_resize(to, from->count, NETID_INVALID);
+            netid_array_resize(to, from->count, 0xff);
 
             for (unsigned i = 0; i < from->count; i++)
                to->items[i] = from->items[i];
@@ -1134,9 +1133,7 @@ object_t *object_copy_sweep(object_t *object, object_copy_ctx_t *ctx)
          else if (ITEM_RANGE_ARRAY & mask) {
             const range_array_t *from = &(object->items[n].range_array);
             range_array_t *to = &(copy->items[n].range_array);
-
-            range_t dummy;
-            range_array_resize(to, from->count, dummy);
+            range_array_resize(to, from->count, 0);
 
             for (unsigned i = 0; i < from->count; i++) {
                to->items[i].kind = from->items[i].kind;
@@ -1150,7 +1147,7 @@ object_t *object_copy_sweep(object_t *object, object_copy_ctx_t *ctx)
             const type_array_t *from = &(object->items[n].type_array);
             type_array_t *to = &(object->items[n].type_array);
 
-            type_array_resize(to, from->count, NULL);
+            type_array_resize(to, from->count, 0);
 
             for (unsigned i = 0; i < from->count; i++)
                to->items[i] = (type_t)
@@ -1184,7 +1181,7 @@ void object_replace(object_t *t, object_t *a)
             const type_array_t *from = &(a->items[n].type_array);
             type_array_t *to = &(t->items[n].type_array);
 
-            type_array_resize(to, from->count, NULL);
+            type_array_resize(to, from->count, 0);
 
             for (unsigned i = 0; i < from->count; i++)
                to->items[i] = from->items[i];
@@ -1197,7 +1194,7 @@ void object_replace(object_t *t, object_t *a)
             const tree_array_t *from = &(a->items[n].tree_array);
             tree_array_t *to = &(t->items[n].tree_array);
 
-            tree_array_resize(to, from->count, NULL);
+            tree_array_resize(to, from->count, 0);
 
             for (size_t i = 0; i < from->count; i++)
                to->items[i] = from->items[i];
@@ -1206,8 +1203,7 @@ void object_replace(object_t *t, object_t *a)
             const range_array_t *from = &(a->items[n].range_array);
             range_array_t *to = &(t->items[n].range_array);
 
-            range_t dummy;
-            range_array_resize(to, from->count, dummy);
+            range_array_resize(to, from->count, 0);
 
             for (unsigned i = 0; i < from->count; i++)
                to->items[i] = from->items[i];

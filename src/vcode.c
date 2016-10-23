@@ -4458,146 +4458,359 @@ vcode_reg_t emit_undefined(vcode_type_t type)
    return (op->result = vcode_add_reg(type));
 }
 
-static void vcode_write_unit(vcode_unit_t unit, fbuf_t *fbuf,
+static void vcode_write_unit(vcode_unit_t unit, fbuf_t *f,
                              ident_wr_ctx_t ident_wr_ctx)
 {
-   write_u8(unit->kind, fbuf);
+   write_u8(unit->kind, f);
    ident_write(unit->name, ident_wr_ctx);
-   write_u32(unit->result, fbuf);
-   write_u32(unit->flags, fbuf);
+   write_u32(unit->result, f);
+   write_u32(unit->flags, f);
+   write_u32(unit->depth, f);
 
-   write_u32(unit->blocks.count, fbuf);
+   if (unit->kind != VCODE_UNIT_CONTEXT) {
+      vcode_select_unit(unit);
+      vcode_select_unit(vcode_unit_context());
+      ident_write(vcode_unit_name(), ident_wr_ctx);
+      vcode_close();
+   }
+
+   write_u32(unit->blocks.count, f);
    for (unsigned i = 0; i < unit->blocks.count; i++) {
       const block_t *b = &(unit->blocks.items[i]);
-      write_u32(b->ops.count, fbuf);
+      write_u32(b->ops.count, f);
 
       for (unsigned j = 0; j < b->ops.count; j++) {
          const op_t *op = &(b->ops.items[j]);
 
-         write_u8(op->kind, fbuf);
-         write_u32(op->result, fbuf);
+         write_u8(op->kind, f);
+         write_u32(op->result, f);
 
-         write_u32(op->args.count, fbuf);
+         write_u32(op->args.count, f);
          for (unsigned k = 0; k < op->args.count; k++)
-            write_u32(op->args.items[k], fbuf);
+            write_u32(op->args.items[k], f);
 
          if (OP_HAS_TARGET(op->kind)) {
-            write_u32(op->targets.count, fbuf);
+            write_u32(op->targets.count, f);
             for (unsigned k = 0; k < op->targets.count; k++)
-               write_u32(op->targets.items[k], fbuf);
+               write_u32(op->targets.items[k], f);
          }
 
          if (OP_HAS_TYPE(op->kind))
-            write_u32(op->type, fbuf);
+            write_u32(op->type, f);
          if (OP_HAS_ADDRESS(op->kind))
-            write_u32(op->address, fbuf);
+            write_u32(op->address, f);
          if (OP_HAS_BOOKMARK(op->kind))
-            write_u32(tree_index(op->bookmark.tree), fbuf);
+            write_u32(tree_index(op->bookmark.tree), f);
          if (OP_HAS_FUNC(op->kind))
             ident_write(op->func, ident_wr_ctx);
          if (OP_HAS_SUBKIND(op->kind))
-            write_u32(op->subkind, fbuf);
+            write_u8(op->subkind, f);
          if (OP_HAS_CMP(op->kind))
-            write_u32(op->cmp, fbuf);
+            write_u8(op->cmp, f);
          if (OP_HAS_VALUE(op->kind))
-            write_u64(op->value, fbuf);
+            write_u64(op->value, f);
          if (OP_HAS_REAL(op->kind))
-            write_double(op->real, fbuf);
+            write_double(op->real, f);
          if (OP_HAS_COMMENT(op->kind))
             ;   // Do not save comments
          if (OP_HAS_SIGNAL(op->kind))
-            write_u32(op->signal, fbuf);
+            write_u32(op->signal, f);
          if (OP_HAS_DIM(op->kind))
-            write_u32(op->dim, fbuf);
+            write_u32(op->dim, f);
          if (OP_HAS_HOPS(op->kind))
-            write_u32(op->hops, fbuf);
+            write_u32(op->hops, f);
          if (OP_HAS_FIELD(op->kind))
-            write_u32(op->field, fbuf);
+            write_u32(op->field, f);
          if (OP_HAS_HINT(op->kind))
-            write_u32(tree_index(op->hint.tree), fbuf);
+            write_u32(tree_index(op->hint.tree), f);
          if (OP_HAS_TAG(op->kind))
-            write_u32(op->tag, fbuf);
+            write_u32(op->tag, f);
       }
    }
 
-   write_u32(unit->regs.count, fbuf);
+   write_u32(unit->regs.count, f);
    for (unsigned i = 0; i < unit->regs.count; i++) {
       const reg_t *r = &(unit->regs.items[i]);
-      write_u32(r->type, fbuf);
-      write_u32(r->bounds, fbuf);
+      write_u32(r->type, f);
+      write_u32(r->bounds, f);
    }
 
-   write_u32(unit->types.count, fbuf);
+   write_u32(unit->types.count, f);
    for (unsigned i = 0; i < unit->types.count; i++) {
       const vtype_t *t = &(unit->types.items[i]);
-      write_u8(t->kind, fbuf);
+      write_u8(t->kind, f);
       switch (t->kind) {
       case VCODE_TYPE_INT:
       case VCODE_TYPE_OFFSET:
-         write_u64(t->low, fbuf);
-         write_u64(t->high, fbuf);
+         write_u64(t->low, f);
+         write_u64(t->high, f);
          break;
 
       case VCODE_TYPE_REAL:
-         write_double(t->rlow, fbuf);
-         write_double(t->rhigh, fbuf);
+         write_double(t->rlow, f);
+         write_double(t->rhigh, f);
          break;
 
       case VCODE_TYPE_CARRAY:
       case VCODE_TYPE_UARRAY:
-         write_u8(t->dims, fbuf);
-         write_u32(t->size, fbuf);
-         write_u32(t->elem, fbuf);
-         write_u32(t->bounds, fbuf);
+         write_u8(t->dims, f);
+         write_u32(t->size, f);
+         write_u32(t->elem, f);
+         write_u32(t->bounds, f);
          break;
 
       case VCODE_TYPE_ACCESS:
       case VCODE_TYPE_POINTER:
-         write_u32(t->pointed, fbuf);
+         write_u32(t->pointed, f);
          break;
 
       case VCODE_TYPE_FILE:
       case VCODE_TYPE_SIGNAL:
-         write_u32(t->base, fbuf);
+         write_u32(t->base, f);
          break;
 
       case VCODE_TYPE_RECORD:
          ident_write(t->name, ident_wr_ctx);
-         write_u32(t->index, fbuf);
-         write_u32(t->fields.count, fbuf);
+         write_u32(t->index, f);
+         write_u32(t->fields.count, f);
          for (unsigned j = 0; j < t->fields.count; j++)
-            write_u32(t->fields.items[j], fbuf);
+            write_u32(t->fields.items[j], f);
          break;
       }
    }
 
-   write_u32(unit->params.count, fbuf);
+   write_u32(unit->vars.count, f);
+   for (unsigned i = 0; i < unit->vars.count; i++) {
+      const var_t *v = &(unit->vars.items[i]);
+      write_u32(v->type, f);
+      write_u32(v->bounds, f);
+      ident_write(v->name, ident_wr_ctx);
+      write_u32(v->flags, f);
+   }
+
+   write_u32(unit->signals.count, f);
+   for (unsigned i = 0; i < unit->signals.count; i++) {
+      const signal_t *s = &(unit->signals.items[i]);
+      write_u32(s->type, f);
+      write_u32(s->bounds, f);
+      ident_write(s->name, ident_wr_ctx);
+      write_u32(s->shadow, f);
+      write_u32(s->flags, f);
+      write_u32(s->nnets, f);
+      for (unsigned j = 0; j < s->nnets; j++)
+         write_u32(s->nets[j], f);
+   }
+
+   write_u32(unit->params.count, f);
    for (unsigned i = 0; i < unit->params.count; i++) {
       const param_t *p = &(unit->params.items[i]);
-      write_u32(p->type, fbuf);
-      write_u32(p->bounds, fbuf);
+      write_u32(p->type, f);
+      write_u32(p->bounds, f);
       ident_write(p->name, ident_wr_ctx);
-      write_u32(p->reg, fbuf);
+      write_u32(p->reg, f);
    }
 
    if (unit->next != NULL)
-      vcode_write_unit(unit->next, fbuf, ident_wr_ctx);
+      vcode_write_unit(unit->next, f, ident_wr_ctx);
 
    if (unit->children != NULL)
-      vcode_write_unit(unit->children, fbuf, ident_wr_ctx);
+      vcode_write_unit(unit->children, f, ident_wr_ctx);
 }
 
-void vcode_write(vcode_unit_t unit, fbuf_t *fbuf)
+void vcode_write(vcode_unit_t unit, fbuf_t *f)
 {
    assert(unit->kind = VCODE_UNIT_CONTEXT);
 
-   write_u32(VCODE_MAGIC, fbuf);
-   write_u8(VCODE_VERSION, fbuf);
+   write_u32(VCODE_MAGIC, f);
+   write_u8(VCODE_VERSION, f);
 
-   ident_wr_ctx_t ident_wr_ctx = ident_write_begin(fbuf);
-   vcode_write_unit(unit, fbuf, ident_wr_ctx);
-   write_u8(0xff, fbuf);  // End marker
+   ident_wr_ctx_t ident_wr_ctx = ident_write_begin(f);
+   vcode_write_unit(unit, f, ident_wr_ctx);
+   write_u8(0xff, f);  // End marker
    ident_write_end(ident_wr_ctx);
+}
+
+static bool vcode_read_unit(fbuf_t *f, tree_rd_ctx_t tree_ctx,
+                            ident_rd_ctx_t ident_rd_ctx)
+{
+   const uint8_t marker = read_u8(f);
+   if (marker == 0xff)
+      return false;
+
+   vcode_unit_t unit = xcalloc(sizeof(struct vcode_unit));
+   unit->kind   = marker;
+   unit->name   = ident_read(ident_rd_ctx);
+   unit->result = read_u32(f);
+   unit->flags  = read_u32(f);
+   unit->depth  = read_u32(f);
+
+   if (unit->kind != VCODE_UNIT_CONTEXT) {
+      ident_t context_name = ident_read(ident_rd_ctx);
+      unit->context = vcode_find_unit(context_name);
+      if (unit->context == NULL)
+         fatal("%s references nonexistent context %s", fbuf_file_name(f),
+               istr(context_name));
+   }
+   else
+      unit->context = unit;
+
+   block_array_resize(&(unit->blocks), read_u32(f), 0);
+   for (unsigned i = 0; i < unit->blocks.count; i++) {
+      block_t *b = &(unit->blocks.items[i]);
+      op_array_resize(&(b->ops), read_u32(f), 0);
+
+      for (unsigned j = 0; j < b->ops.count; j++) {
+         op_t *op = &(b->ops.items[j]);
+
+         op->kind = read_u8(f);
+         op->result = read_u32(f);
+
+         vcode_reg_array_resize(&(op->args), read_u32(f), 0);
+         for (unsigned k = 0; k < op->args.count; k++)
+            op->args.items[k] = read_u32(f);
+
+         if (OP_HAS_TARGET(op->kind)) {
+            vcode_block_array_resize(&(op->targets), read_u32(f), 0);
+            for (unsigned k = 0; k < op->targets.count; k++)
+               op->targets.items[k] = read_u32(f);
+         }
+
+         if (OP_HAS_TYPE(op->kind))
+            op->type = read_u32(f);
+         if (OP_HAS_ADDRESS(op->kind))
+            op->address = read_u32(f);
+         if (OP_HAS_BOOKMARK(op->kind))
+            op->bookmark.tree = tree_read_recall(tree_ctx, read_u32(f));
+         if (OP_HAS_FUNC(op->kind))
+            op->func = ident_read(ident_rd_ctx);
+         if (OP_HAS_SUBKIND(op->kind))
+            op->subkind = read_u8(f);
+         if (OP_HAS_CMP(op->kind))
+            op->cmp = read_u8(f);
+         if (OP_HAS_VALUE(op->kind))
+            op->value = read_u64(f);
+         if (OP_HAS_REAL(op->kind))
+            op->real = read_double(f);
+         if (OP_HAS_COMMENT(op->kind))
+            op->comment = NULL;
+         if (OP_HAS_SIGNAL(op->kind))
+            op->signal = read_u32(f);
+         if (OP_HAS_DIM(op->kind))
+            op->dim = read_u32(f);
+         if (OP_HAS_HOPS(op->kind))
+            op->hops = read_u32(f);
+         if (OP_HAS_FIELD(op->kind))
+            op->field = read_u32(f);
+         if (OP_HAS_HINT(op->kind))
+            op->hint.tree = tree_read_recall(tree_ctx, read_u32(f));
+         if (OP_HAS_TAG(op->kind))
+            op->tag = read_u32(f);
+      }
+   }
+
+   reg_array_resize(&(unit->regs), read_u32(f), 0);
+   for (unsigned i = 0; i < unit->regs.count; i++) {
+      reg_t *r = &(unit->regs.items[i]);
+      r->type = read_u32(f);
+      r->bounds = read_u32(f);
+   }
+
+   vtype_array_resize(&(unit->types), read_u32(f), 0);
+   for (unsigned i = 0; i < unit->types.count; i++) {
+      vtype_t *t = &(unit->types.items[i]);
+      switch ((t->kind = read_u8(f))) {
+      case VCODE_TYPE_INT:
+      case VCODE_TYPE_OFFSET:
+         t->low = read_u64(f);
+         t->high = read_u64(f);
+         break;
+
+      case VCODE_TYPE_REAL:
+         t->rlow = read_double(f);
+         t->rhigh = read_double(f);
+         break;
+
+      case VCODE_TYPE_CARRAY:
+      case VCODE_TYPE_UARRAY:
+         t->dims = read_u8(f);
+         t->size = read_u32(f);
+         t->elem = read_u32(f);
+         t->bounds = read_u32(f);
+         break;
+
+      case VCODE_TYPE_POINTER:
+      case VCODE_TYPE_ACCESS:
+         t->base = read_u32(f);
+         break;
+
+      case VCODE_TYPE_FILE:
+      case VCODE_TYPE_SIGNAL:
+         t->base = read_u32(f);
+         break;
+
+      case VCODE_TYPE_RECORD:
+         t->name = ident_read(ident_rd_ctx);
+         t->index = read_u32(f);
+         vcode_type_array_resize(&(t->fields), read_u32(f), 0);
+         for (unsigned j = 0; j < t->fields.count; j++)
+            t->fields.items[j] = read_u32(f);
+         break;
+      }
+   }
+
+   var_array_resize(&(unit->vars), read_u32(f), 0);
+   for (unsigned i = 0; i < unit->vars.count; i++) {
+      var_t *v = &(unit->vars.items[i]);
+      v->type = read_u32(f);
+      v->bounds = read_u32(f);
+      v->name = ident_read(ident_rd_ctx);
+      v->flags = read_u32(f);
+   }
+
+   signal_array_resize(&(unit->signals), read_u32(f), 0);
+   for (unsigned i = 0; i < unit->signals.count; i++) {
+      signal_t *s = &(unit->signals.items[i]);
+      s->type = read_u32(f);
+      s->bounds = read_u32(f);
+      s->name = ident_read(ident_rd_ctx);
+      s->shadow = read_u32(f);
+      s->flags = read_u32(f);
+      s->nnets = read_u32(f);
+      s->nets = xmalloc(sizeof(uint32_t) * s->nnets);
+      for (unsigned j = 0; j < s->nnets; j++)
+         s->nets[j] = read_u32(f);
+   }
+
+   param_array_resize(&(unit->params), read_u32(f), 0);
+   for (unsigned i = 0; i < unit->params.count; i++) {
+      param_t *p = &(unit->params.items[i]);
+      p->type = read_u32(f);
+      p->bounds = read_u32(f);
+      p->name = ident_read(ident_rd_ctx);
+      p->reg = read_u32(f);
+   }
+
+   vcode_registry_add(unit);
+
+   return true;
+}
+
+void vcode_read(fbuf_t *f, tree_rd_ctx_t tree_ctx)
+{
+   if (read_u32(f) != VCODE_MAGIC)
+      fatal("%s has invalid vcode header", fbuf_file_name(f));
+
+   const uint8_t version = read_u8(f);
+   if (version != VCODE_VERSION)
+      fatal("%s was created with vcode format version %d (expected %d)",
+            fbuf_file_name(f), version, VCODE_VERSION);
+
+   ident_rd_ctx_t ident_rd_ctx = ident_read_begin(f);
+
+   while (vcode_read_unit(f, tree_ctx, ident_rd_ctx))
+      ;
+
+   ident_read_end(ident_rd_ctx);
 }
 
 #if VCODE_CHECK_UNIONS

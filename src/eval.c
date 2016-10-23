@@ -613,6 +613,28 @@ static void eval_op_abs(int op, eval_state_t *state)
    }
 }
 
+static void eval_load_vcode(lib_t lib, tree_t unit, tree_rd_ctx_t tree_ctx,
+                            eval_state_t *state)
+{
+   if (tree_has_code(unit))
+      return;
+
+   ident_t unit_name = tree_ident(unit);
+
+   if (state->flags & EVAL_VERBOSE)
+      notef("loading vcode for %s", istr(unit_name));
+
+   char *name LOCAL = xasprintf("_%s.vcode", istr(unit_name));
+   fbuf_t *f = lib_fbuf_open(lib, name, FBUF_IN);
+   if (f == NULL) {
+      EVAL_WARN(state->fcall, "cannot load vcode for %s", istr(unit_name));
+      return;
+   }
+
+   vcode_read(f, tree_ctx);
+   fbuf_close(f);
+}
+
 static void eval_op_fcall(int op, eval_state_t *state)
 {
    vcode_state_t vcode_state;
@@ -626,23 +648,23 @@ static void eval_op_fcall(int op, eval_state_t *state)
    for (int i = 0; i < nparams; i++)
       params[i] = eval_get_reg(vcode_get_arg(op, i), state);
 
-   if (vcode == NULL && (state->flags & EVAL_LOWER)) {
+   if (vcode == NULL) {
       ident_t unit_name = ident_runtil(vcode_get_func(op), '.');
       ident_t lib_name = ident_until(unit_name, '.');
 
       lib_t lib;
       if (lib_name != unit_name && (lib = lib_find(lib_name, false)) != NULL) {
-         tree_t unit = lib_get(lib, unit_name);
+         tree_rd_ctx_t tree_ctx;
+         tree_t unit = lib_get_ctx(lib, unit_name, &tree_ctx);
          if (unit != NULL) {
-            if (state->flags & EVAL_VERBOSE)
-               note_at(tree_loc(state->fcall), "lowering %s", istr(unit_name));
-            lower_unit(unit);
+            eval_load_vcode(lib, unit, tree_ctx, state);
 
             if (tree_kind(unit) == T_PACKAGE) {
-               tree_t body =
-                  lib_get(lib, ident_prefix(unit_name, ident_new("body"), '-'));
+               ident_t body_name =
+                  ident_prefix(unit_name, ident_new("body"), '-');
+               tree_t body = lib_get_ctx(lib, body_name, &tree_ctx);
                if (body != NULL)
-                  lower_unit(body);
+                  eval_load_vcode(lib, body, tree_ctx, state);
             }
 
             vcode = vcode_find_unit(func_name);
@@ -1463,7 +1485,7 @@ static tree_t fold_tree_fn(tree_t t, void *context)
 {
    switch (tree_kind(t)) {
    case T_FCALL:
-      return eval(t, EVAL_LOWER | EVAL_FCALL | EVAL_FOLDING);
+      return eval(t, EVAL_FCALL | EVAL_FOLDING);
 
    case T_REF:
       {
