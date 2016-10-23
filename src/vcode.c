@@ -3238,12 +3238,11 @@ vcode_reg_t emit_index(vcode_var_t var, vcode_reg_t offset)
       vcode_add_arg(op, offset);
 
    vcode_type_t typeref = vcode_var_type(var);
-   vtype_t *vt = vcode_type_data(typeref);
-   switch (vt->kind) {
+   switch (vtype_kind(typeref)) {
    case VCODE_TYPE_CARRAY:
-      op->type = vtype_pointer(vt->elem);
+      op->type = vtype_pointer(vtype_elem(typeref));
       op->result = vcode_add_reg(op->type);
-      vcode_reg_data(op->result)->bounds = vt->bounds;
+      vcode_reg_data(op->result)->bounds = vtype_bounds(typeref);
       break;
 
    case VCODE_TYPE_RECORD:
