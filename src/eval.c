@@ -1404,6 +1404,10 @@ tree_t eval(tree_t fcall, eval_flags_t flags)
    if (thunk == NULL)
       return fcall;
 
+   if (flags & EVAL_VERBOSE)
+      note_at(tree_loc(fcall), "evaluate thunk for %s",
+              istr(tree_ident(fcall)));
+
    vcode_select_unit(thunk);
    vcode_select_block(0);
 
