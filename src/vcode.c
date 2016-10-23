@@ -33,8 +33,8 @@ DECLARE_AND_DEFINE_ARRAY(vcode_type);
 
 #define OP_HAS_TYPE(x)                                                  \
    (x == VCODE_OP_BOUNDS || x == VCODE_OP_ALLOCA  || x == VCODE_OP_COPY \
-    || o->kind == VCODE_OP_SET_INITIAL || x == VCODE_OP_INDEX_CHECK     \
-    || o->kind == VCODE_OP_CONST || x == VCODE_OP_CAST)
+    || x == VCODE_OP_SET_INITIAL || x == VCODE_OP_INDEX_CHECK           \
+    || x == VCODE_OP_CONST || x == VCODE_OP_CAST)
 #define OP_HAS_ADDRESS(x)                                               \
    (x == VCODE_OP_LOAD || x == VCODE_OP_STORE || x == VCODE_OP_INDEX    \
     || x == VCODE_OP_RESOLVED_ADDRESS)
@@ -57,7 +57,7 @@ DECLARE_AND_DEFINE_ARRAY(vcode_type);
     || x == VCODE_OP_SET_INITIAL || x == VCODE_OP_NEEDS_LAST_VALUE)
 #define OP_HAS_DIM(x)                                                   \
    (x == VCODE_OP_UARRAY_LEFT || x == VCODE_OP_UARRAY_RIGHT             \
-    || o->kind == VCODE_OP_UARRAY_DIR || x == VCODE_OP_UARRAY_LEN)
+    || x == VCODE_OP_UARRAY_DIR || x == VCODE_OP_UARRAY_LEN)
 #define OP_HAS_HOPS(x)                                                  \
    (x == VCODE_OP_PARAM_UPREF || x == VCODE_OP_NESTED_FCALL             \
     || x == VCODE_OP_NESTED_PCALL || x == VCODE_OP_NESTED_RESUME)
@@ -77,8 +77,7 @@ DECLARE_AND_DEFINE_ARRAY(vcode_type);
     || x == VCODE_OP_DYNAMIC_BOUNDS || x == VCODE_OP_ARRAY_SIZE         \
     || x == VCODE_OP_INDEX_CHECK)
 #define OP_HAS_HINT(x)                                                  \
-   (x == VCODE_OP_BOUNDS || x == VCODE_OP_DYNAMIC_BOUNDS                \
-    || x == VCODE_OP_INDEX_CHECK)
+   (x == VCODE_OP_BOUNDS || x == VCODE_OP_DYNAMIC_BOUNDS)
 #define OP_HAS_TARGET(x)                                                \
    (x == VCODE_OP_WAIT || x == VCODE_OP_JUMP || x == VCODE_OP_COND      \
     || x == VCODE_OP_PCALL || x == VCODE_OP_CASE                        \
@@ -86,7 +85,7 @@ DECLARE_AND_DEFINE_ARRAY(vcode_type);
 
 #define OP_USE_COUNT_U0(x) \
    (OP_HAS_CMP(x) + OP_HAS_VALUE(x) + OP_HAS_REAL(x) +                  \
-    OP_HAS_COMMENT(x) + OP_HAS_SIGNAL(X) + OP_HAS_DIM(x) +              \
+    OP_HAS_COMMENT(x) + OP_HAS_SIGNAL(x) + OP_HAS_DIM(x) +              \
     OP_HAS_HOPS(x) + OP_HAS_FIELD(x) + OP_HAS_HINT(x) +                 \
     OP_HAS_TAG(x))
 
@@ -126,7 +125,7 @@ typedef struct {
 } reg_t;
 
 typedef struct {
-   vtype_kind_t       kind;
+   vtype_kind_t kind;
    union {
       struct {
          int64_t low;
@@ -142,8 +141,8 @@ typedef struct {
          vcode_type_t  elem;
          vcode_type_t  bounds;
       };
-      vcode_type_t       pointed;
-      vcode_type_t       base;
+      vcode_type_t pointed;
+      vcode_type_t base;
       struct {
          ident_t            name;
          uint32_t           index;
@@ -218,6 +217,8 @@ struct vcode_unit {
 
 #define VCODE_FOR_EACH_MATCHING_OP(name, k) \
    VCODE_FOR_EACH_OP(name) if (name->kind == k)
+
+#define VCODE_MAGIC 0x76636f64
 
 static vcode_unit_t  active_unit = NULL;
 static vcode_block_t active_block = VCODE_INVALID_BLOCK;
@@ -4430,5 +4431,82 @@ vcode_reg_t emit_undefined(vcode_type_t type)
 {
    op_t *op = vcode_add_op(VCODE_OP_UNDEFINED);
    return (op->result = vcode_add_reg(type));
+}
 
+void vcode_write(vcode_unit_t unit, fbuf_t *fbuf)
+{
+   assert(unit->kind = VCODE_UNIT_CONTEXT);
+
+   write_u32(VCODE_MAGIC, fbuf);
+
+   ident_wr_ctx_t ident_wr_ctx = ident_write_begin(fbuf);
+
+   write_u8(unit->kind, fbuf);
+   ident_write(unit->name, ident_wr_ctx);
+   write_u32(unit->result, fbuf);
+
+   write_u32(unit->blocks.count, fbuf);
+   for (unsigned i = 0; i < unit->blocks.count; i++) {
+      const block_t *b = &(unit->blocks.items[i]);
+      write_u32(b->ops.count, fbuf);
+
+      for (unsigned j = 0; j < b->ops.count; j++) {
+         const op_t *op = &(b->ops.items[j]);
+
+         assert(OP_USE_COUNT_U0(op->kind) <= 1);
+
+         write_u8(op->kind, fbuf);
+         write_u32(op->result, fbuf);
+
+         write_u32(op->args.count, fbuf);
+         for (unsigned k = 0; k < op->args.count; k++)
+            write_u32(op->args.items[k], fbuf);
+
+         if (OP_HAS_TARGET(op->kind)) {
+            write_u32(op->targets.count, fbuf);
+            for (unsigned k = 0; k < op->targets.count; k++)
+               write_u32(op->targets.items[k], fbuf);
+         }
+
+         if (OP_HAS_TYPE(op->kind))
+            write_u32(op->type, fbuf);
+         if (OP_HAS_ADDRESS(op->kind))
+            write_u32(op->address, fbuf);
+         if (OP_HAS_BOOKMARK(op->kind))
+            write_u32(tree_index(op->bookmark.tree), fbuf);
+         if (OP_HAS_FUNC(op->kind))
+            ident_write(op->func, ident_wr_ctx);
+         if (OP_HAS_SUBKIND(op->kind))
+            write_u32(op->subkind, fbuf);
+         if (OP_HAS_CMP(op->kind))
+            write_u32(op->cmp, fbuf);
+         if (OP_HAS_VALUE(op->kind))
+            write_u64(op->value, fbuf);
+         if (OP_HAS_REAL(op->kind))
+            write_double(op->real, fbuf);
+         if (OP_HAS_COMMENT(op->kind))
+            ;   // Do not save comments
+         if (OP_HAS_SIGNAL(op->kind))
+            write_u32(op->signal, fbuf);
+         if (OP_HAS_DIM(op->kind))
+            write_u32(op->dim, fbuf);
+         if (OP_HAS_HOPS(op->kind))
+            write_u32(op->hops, fbuf);
+         if (OP_HAS_FIELD(op->kind))
+            write_u32(op->field, fbuf);
+         if (OP_HAS_HINT(op->kind))
+            write_u32(tree_index(op->hint.tree), fbuf);
+         if (OP_HAS_TAG(op->kind))
+            write_u32(op->tag, fbuf);
+      }
+   }
+
+   write_u32(unit->regs.count, fbuf);
+   for (unsigned i = 0; i < unit->regs.count; i++) {
+      const reg_t *r = &(unit->regs.items[i]);
+      write_u32(r->type, fbuf);
+      write_u32(r->bounds, fbuf);
+   }
+
+   ident_write_end(ident_wr_ctx);
 }

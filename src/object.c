@@ -626,11 +626,8 @@ void object_write(object_t *object, object_wr_ctx_t *ctx)
             for (unsigned i = 0; i < a->count; i++)
                write_u32(a->items[i], ctx->file);
          }
-         else if (ITEM_DOUBLE & mask) {
-            union { double d; uint64_t i; } u;
-            u.d = object->items[n].dval;
-            write_u64(u.i, ctx->file);
-         }
+         else if (ITEM_DOUBLE & mask)
+            write_double(object->items[n].dval, ctx->file);
          else if (ITEM_ATTRS & mask) {
             const attr_tab_t *attrs = &(object->items[n].attrs);
             write_u16(attrs->num, ctx->file);
@@ -826,11 +823,8 @@ object_t *object_read(object_rd_ctx_t *ctx, int tag)
             for (unsigned i = 0; i < a->count; i++)
                a->items[i] = read_u32(ctx->file);
          }
-         else if (ITEM_DOUBLE & mask) {
-            union { uint64_t i; double d; } u;
-            u.i = read_u64(ctx->file);
-            object->items[n].dval = u.d;
-         }
+         else if (ITEM_DOUBLE & mask)
+            object->items[n].dval = read_double(ctx->file);
          else if (ITEM_ATTRS & mask) {
             attr_tab_t *attrs = &(object->items[n].attrs);
 

@@ -260,6 +260,13 @@ void write_raw(const void *buf, size_t len, fbuf_t *f)
    f->wpend += len;
 }
 
+void write_double(double d, fbuf_t *f)
+{
+   union { double d; uint64_t i; } u;
+   u.d = d;
+   write_u64(u.i, f);
+}
+
 uint32_t read_u32(fbuf_t *f)
 {
    fbuf_maybe_read(f, 4);
@@ -309,4 +316,11 @@ void read_raw(void *buf, size_t len, fbuf_t *f)
    fbuf_maybe_read(f, len);
    memcpy(buf, f->rbuf + f->rptr, len);
    f->rptr += len;
+}
+
+double read_double(fbuf_t *f)
+{
+   union { uint64_t i; double d; } u;
+   u.i = read_u64(f);
+   return u.d;
 }
