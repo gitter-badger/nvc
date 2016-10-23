@@ -31,28 +31,86 @@ DECLARE_AND_DEFINE_ARRAY(vcode_reg);
 DECLARE_AND_DEFINE_ARRAY(vcode_block);
 DECLARE_AND_DEFINE_ARRAY(vcode_type);
 
+#define OP_HAS_TYPE(x)                                                  \
+   (x == VCODE_OP_BOUNDS || x == VCODE_OP_ALLOCA  || x == VCODE_OP_COPY \
+    || o->kind == VCODE_OP_SET_INITIAL || x == VCODE_OP_INDEX_CHECK     \
+    || o->kind == VCODE_OP_CONST || x == VCODE_OP_CAST)
+#define OP_HAS_ADDRESS(x)                                               \
+   (x == VCODE_OP_LOAD || x == VCODE_OP_STORE || x == VCODE_OP_INDEX    \
+    || x == VCODE_OP_RESOLVED_ADDRESS)
+#define OP_HAS_SUBKIND(x)                                               \
+   (x == VCODE_OP_SCHED_EVENT || x == VCODE_OP_BOUNDS                   \
+    || x == VCODE_OP_VEC_LOAD || x == VCODE_OP_BIT_VEC_OP               \
+    || x == VCODE_OP_INDEX_CHECK || x == VCODE_OP_BIT_SHIFT             \
+    || x == VCODE_OP_ALLOCA || x == VCODE_OP_COVER_COND)
+#define OP_HAS_FUNC(x)                                                  \
+   (x == VCODE_OP_FCALL || x == VCODE_OP_NESTED_FCALL                   \
+    || x == VCODE_OP_PCALL || x == VCODE_OP_RESUME                      \
+    || x == VCODE_OP_SET_INITIAL || x == VCODE_OP_NESTED_PCALL          \
+    || x == VCODE_OP_NESTED_RESUME)
+#define OP_HAS_REAL(x)                                                  \
+   (x == VCODE_OP_CONST_REAL)
+#define OP_HAS_VALUE(x)                                                 \
+   (x == VCODE_OP_CONST)
+#define OP_HAS_SIGNAL(x)                                                \
+   (x == VCODE_OP_NETS || x == VCODE_OP_RESOLVED_ADDRESS                \
+    || x == VCODE_OP_SET_INITIAL || x == VCODE_OP_NEEDS_LAST_VALUE)
+#define OP_HAS_DIM(x)                                                   \
+   (x == VCODE_OP_UARRAY_LEFT || x == VCODE_OP_UARRAY_RIGHT             \
+    || o->kind == VCODE_OP_UARRAY_DIR || x == VCODE_OP_UARRAY_LEN)
+#define OP_HAS_HOPS(x)                                                  \
+   (x == VCODE_OP_PARAM_UPREF || x == VCODE_OP_NESTED_FCALL             \
+    || x == VCODE_OP_NESTED_PCALL || x == VCODE_OP_NESTED_RESUME)
+#define OP_HAS_FIELD(x)                                                 \
+   (x == VCODE_OP_RECORD_REF)
+#define OP_HAS_CMP(x)                                                   \
+   (x == VCODE_OP_CMP)
+#define OP_HAS_TAG(x)                                                   \
+   (x == VCODE_OP_COVER_STMT || x == VCODE_OP_COVER_COND)
+#define OP_HAS_COMMENT(x)                                               \
+   (x == VCODE_OP_COMMENT)
+#define OP_HAS_BOOKMARK(x)                                              \
+   (x == VCODE_OP_ASSERT || x == VCODE_OP_REPORT                        \
+    || x == VCODE_OP_IMAGE || x == VCODE_OP_SET_INITIAL                 \
+    || x == VCODE_OP_DIV || x == VCODE_OP_NULL_CHECK                    \
+    || x == VCODE_OP_VALUE || x == VCODE_OP_BOUNDS                      \
+    || x == VCODE_OP_DYNAMIC_BOUNDS || x == VCODE_OP_ARRAY_SIZE         \
+    || x == VCODE_OP_INDEX_CHECK)
+#define OP_HAS_HINT(x)                                                  \
+   (x == VCODE_OP_BOUNDS || x == VCODE_OP_DYNAMIC_BOUNDS                \
+    || x == VCODE_OP_INDEX_CHECK)
+#define OP_HAS_TARGET(x)                                                \
+   (x == VCODE_OP_WAIT || x == VCODE_OP_JUMP || x == VCODE_OP_COND      \
+    || x == VCODE_OP_PCALL || x == VCODE_OP_CASE                        \
+    || x == VCODE_OP_NESTED_PCALL)
+
+#define OP_USE_COUNT_U0(x) \
+   (OP_HAS_CMP(x) + OP_HAS_VALUE(x) + OP_HAS_REAL(x) +                  \
+    OP_HAS_COMMENT(x) + OP_HAS_SIGNAL(X) + OP_HAS_DIM(x) +              \
+    OP_HAS_HOPS(x) + OP_HAS_FIELD(x) + OP_HAS_HINT(x) +                 \
+    OP_HAS_TAG(x))
+
 typedef struct {
    vcode_op_t          kind;
    vcode_reg_array_t   args;
    vcode_reg_t         result;
-   vcode_type_t        type;
-   vcode_block_array_t targets;
-   vcode_var_t         address;
-   vcode_bookmark_t    bookmark;   // TODO: move into union
-   ident_t             func;
-   unsigned            subkind;
+   vcode_type_t        type;       // OP_HAS_TYPE
+   vcode_block_array_t targets;    // OP_HAS_TARGET
+   vcode_var_t         address;    // OP_HAS_ADDRESS
+   vcode_bookmark_t    bookmark;   // OP_HAS_BOOKMARK
+   ident_t             func;       // OP_HAS_FUNC
+   unsigned            subkind;    // OP_HAS_SUBKIND
    union {
-      vcode_cmp_t      cmp;
-      int64_t          value;
-      double           real;
-      char            *comment;
-      vcode_signal_t   signal;
-      unsigned         dim;
-      unsigned         hops;
-      unsigned         field;
-      unsigned         elems;
-      vcode_bookmark_t hint;
-      uint32_t         tag;
+      vcode_cmp_t      cmp;        // OP_HAS_CMP
+      int64_t          value;      // OP_HAS_VALUE
+      double           real;       // OP_HAS_REAL
+      char            *comment;    // OP_HAS_COMMENT
+      vcode_signal_t   signal;     // OP_HAS_SIGNAL
+      unsigned         dim;        // OP_HAS_DIM
+      unsigned         hops;       // OP_HAS_HOPS
+      unsigned         field;      // OP_HAS_FIELD
+      vcode_bookmark_t hint;       // OP_HAS_HINT
+      uint32_t         tag;        // OP_HAS_TAG
    };
 } op_t;
 
@@ -695,86 +753,70 @@ vcode_op_t vcode_get_op(int op)
 ident_t vcode_get_func(int op)
 {
    op_t *o = vcode_op_data(op);
-   assert(o->kind == VCODE_OP_FCALL || o->kind == VCODE_OP_NESTED_FCALL
-          || o->kind == VCODE_OP_PCALL || o->kind == VCODE_OP_RESUME
-          || o->kind == VCODE_OP_SET_INITIAL
-          || o->kind == VCODE_OP_NESTED_RESUME
-          || o->kind == VCODE_OP_NESTED_PCALL);
+   assert(OP_HAS_FUNC(o->kind));
    return o->func;
 }
 
 unsigned vcode_get_subkind(int op)
 {
    op_t *o = vcode_op_data(op);
-   assert(o->kind == VCODE_OP_SCHED_EVENT || o->kind == VCODE_OP_BOUNDS
-          || o->kind == VCODE_OP_VEC_LOAD || o->kind == VCODE_OP_BIT_VEC_OP
-          || o->kind == VCODE_OP_INDEX_CHECK || o->kind == VCODE_OP_BIT_SHIFT
-          || o->kind == VCODE_OP_ALLOCA || o->kind == VCODE_OP_COVER_COND);
+   assert(OP_HAS_SUBKIND(o->kind));
    return o->subkind;
 }
 
 int64_t vcode_get_value(int op)
 {
    op_t *o = vcode_op_data(op);
-   assert(o->kind == VCODE_OP_CONST);
+   assert(OP_HAS_VALUE(o->kind));
    return o->value;
 }
 
 double vcode_get_real(int op)
 {
    op_t *o = vcode_op_data(op);
-   assert(o->kind == VCODE_OP_CONST_REAL);
+   assert(OP_HAS_REAL(o->kind));
    return o->real;
 }
 
 vcode_var_t vcode_get_address(int op)
 {
    op_t *o = vcode_op_data(op);
-   assert(o->kind == VCODE_OP_LOAD || o->kind == VCODE_OP_STORE
-          || o->kind == VCODE_OP_INDEX || o->kind == VCODE_OP_RESOLVED_ADDRESS);
+   assert(OP_HAS_ADDRESS(o->kind));
    return o->address;
 }
 
 vcode_signal_t vcode_get_signal(int op)
 {
    op_t *o = vcode_op_data(op);
-   assert(o->kind == VCODE_OP_NETS || o->kind == VCODE_OP_RESOLVED_ADDRESS
-          || o->kind == VCODE_OP_SET_INITIAL
-          || o->kind == VCODE_OP_NEEDS_LAST_VALUE);
+   assert(OP_HAS_SIGNAL(o->kind));
    return o->signal;
 }
 
 unsigned vcode_get_dim(int op)
 {
    op_t *o = vcode_op_data(op);
-   assert(o->kind == VCODE_OP_UARRAY_LEFT || o->kind == VCODE_OP_UARRAY_RIGHT
-          || o->kind == VCODE_OP_UARRAY_DIR || o->kind == VCODE_OP_UARRAY_LEN);
+   assert(OP_HAS_DIM(o->kind));
    return o->dim;
 }
 
 int vcode_get_hops(int op)
 {
    op_t *o = vcode_op_data(op);
-   assert(o->kind == VCODE_OP_PARAM_UPREF || o->kind == VCODE_OP_NESTED_FCALL
-          || o->kind == VCODE_OP_NESTED_PCALL || o->kind == VCODE_OP_RESUME
-          || o->kind == VCODE_OP_NESTED_RESUME);
+   assert(OP_HAS_HOPS(o->kind));
    return o->hops;
 }
 
 int vcode_get_field(int op)
 {
    op_t *o = vcode_op_data(op);
-   assert(o->kind == VCODE_OP_RECORD_REF);
+   assert(OP_HAS_FIELD(o->kind));
    return o->field;
 }
 
 vcode_var_t vcode_get_type(int op)
 {
    op_t *o = vcode_op_data(op);
-   assert(o->kind == VCODE_OP_BOUNDS || o->kind == VCODE_OP_ALLOCA
-          || o->kind == VCODE_OP_COPY || o->kind == VCODE_OP_SET_INITIAL
-          || o->kind == VCODE_OP_INDEX_CHECK || o->kind == VCODE_OP_CONST
-          || o->kind == VCODE_OP_CAST);
+   assert(OP_HAS_TYPE(o->kind));
    return o->type;
 }
 
@@ -798,26 +840,21 @@ vcode_reg_t vcode_get_result(int op)
 vcode_cmp_t vcode_get_cmp(int op)
 {
    op_t *o = vcode_op_data(op);
-   assert(o->kind == VCODE_OP_CMP);
+   assert(OP_HAS_CMP(o->kind));
    return o->cmp;
 }
 
 uint32_t vcode_get_tag(int op)
 {
    op_t *o = vcode_op_data(op);
-   assert(o->kind == VCODE_OP_COVER_STMT || o->kind == VCODE_OP_COVER_COND);
+   assert(OP_HAS_TAG(o->kind));
    return o->tag;
 }
 
 vcode_bookmark_t vcode_get_bookmark(int op)
 {
    op_t *o = vcode_op_data(op);
-   assert(o->kind == VCODE_OP_ASSERT || o->kind == VCODE_OP_REPORT
-          || o->kind == VCODE_OP_IMAGE || o->kind == VCODE_OP_SET_INITIAL
-          || o->kind == VCODE_OP_DIV || o->kind == VCODE_OP_NULL_CHECK
-          || o->kind == VCODE_OP_VALUE || o->kind == VCODE_OP_BOUNDS
-          || o->kind == VCODE_OP_DYNAMIC_BOUNDS
-          || o->kind == VCODE_OP_ARRAY_SIZE || o->kind == VCODE_OP_INDEX_CHECK);
+   assert(OP_HAS_BOOKMARK(o->kind));
    return o->bookmark;
 }
 
@@ -831,18 +868,14 @@ uint32_t vcode_get_hint(int op)
 {
    // TODO: replace this with function returning bookmark?
    op_t *o = vcode_op_data(op);
-   assert(o->kind == VCODE_OP_BOUNDS
-          || o->kind == VCODE_OP_DYNAMIC_BOUNDS
-          || o->kind == VCODE_OP_INDEX_CHECK);
+   assert(OP_HAS_HINT(o->kind));
    return tree_index(o->hint.tree);
 }
 
 vcode_block_t vcode_get_target(int op, int nth)
 {
    op_t *o = vcode_op_data(op);
-   assert(o->kind == VCODE_OP_WAIT || o->kind == VCODE_OP_JUMP
-          || o->kind == VCODE_OP_COND || o->kind == VCODE_OP_PCALL
-          || o->kind == VCODE_OP_CASE || o->kind == VCODE_OP_NESTED_PCALL);
+   assert(OP_HAS_TARGET(o->kind));
    return vcode_block_array_nth(&(o->targets), nth);
 }
 
