@@ -4178,20 +4178,13 @@ static void lower_decl(tree_t decl)
    }
 }
 
-static void lower_finished(bool save)
+static void lower_finished(void)
 {
    vcode_opt();
 
    if (verbose != NULL) {
       if (*verbose == '\0' || strstr(istr(vcode_unit_name()), verbose) != NULL)
          vcode_dump();
-   }
-
-   if (save) {
-      char *name LOCAL = xasprintf("_%s.vcode", istr(vcode_unit_name()));
-      fbuf_t *fbuf = lib_fbuf_open(lib_work(), name, FBUF_OUT);
-      vcode_write(vcode_active_unit(), fbuf);
-      fbuf_close(fbuf);
    }
 }
 
@@ -4367,7 +4360,7 @@ static void lower_proc_body(tree_t body, vcode_unit_t context)
    if (!vcode_block_finished())
       emit_return(VCODE_INVALID_REG);
 
-   lower_finished(false);
+   lower_finished();
 
    tree_set_code(body, vu);
 }
@@ -4391,7 +4384,7 @@ static void lower_func_body(tree_t body, vcode_unit_t context)
    for (int i = 0; i < nstmts; i++)
       lower_stmt(tree_stmt(body, i), NULL);
 
-   lower_finished(false);
+   lower_finished();
 
    assert(!tree_has_code(body));
    tree_set_code(body, vu);
@@ -4609,7 +4602,7 @@ static void lower_process(tree_t proc, vcode_unit_t context)
    vcode_select_block(reset_bb);
    emit_return(VCODE_INVALID_REG);
 
-   lower_finished(false);
+   lower_finished();
 
    assert(!tree_has_code(proc));
    tree_set_code(proc, vu);
@@ -4624,7 +4617,7 @@ static void lower_elab(tree_t unit)
 
    emit_return(VCODE_INVALID_REG);
 
-   lower_finished(false);
+   lower_finished();
 
    const int nstmts = tree_stmts(unit);
    for (int i = 0; i < nstmts; i++) {
@@ -4643,7 +4636,7 @@ static void lower_pack_body(tree_t unit)
 
    emit_return(VCODE_INVALID_REG);
 
-   lower_finished(true);
+   lower_finished();
 }
 
 static void lower_package(tree_t unit)
@@ -4655,7 +4648,7 @@ static void lower_package(tree_t unit)
 
    emit_return(VCODE_INVALID_REG);
 
-   lower_finished(true);
+   lower_finished();
 }
 
 static void lower_arch(tree_t unit)
@@ -4667,7 +4660,7 @@ static void lower_arch(tree_t unit)
 
    emit_return(VCODE_INVALID_REG);
 
-   lower_finished(true);
+   lower_finished();
 }
 
 static void lower_set_verbose(void)
@@ -4734,7 +4727,7 @@ vcode_unit_t lower_thunk(tree_t fcall)
    vcode_reg_t result_reg = lower_expr(fcall, EXPR_RVALUE);
    emit_return(emit_cast(vtype, vtype, result_reg));
 
-   lower_finished(false);
+   lower_finished();
 
    vcode_close();
    return thunk;

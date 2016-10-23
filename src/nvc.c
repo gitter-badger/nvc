@@ -18,6 +18,7 @@
 #include "util.h"
 #include "phase.h"
 #include "common.h"
+#include "vcode.h"
 #include "rt/rt.h"
 
 #include <unistd.h>
@@ -171,6 +172,13 @@ static int analyse(int argc, char **argv)
 
    for (int i = 0; i < n_units; i++) {
       lower_unit(units[i]);
+
+      if (tree_kind(units[i]) != T_ENTITY) {    // TODO: entity should have code
+         char *name LOCAL = xasprintf("_%s.vcode", istr(tree_ident(units[i])));
+         fbuf_t *fbuf = lib_fbuf_open(lib_work(), name, FBUF_OUT);
+         vcode_write(tree_code(units[i]), fbuf);
+         fbuf_close(fbuf);
+      }
 
       const tree_kind_t kind = tree_kind(units[i]);
       const bool need_cgen = kind == T_PACK_BODY
