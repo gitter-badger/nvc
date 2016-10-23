@@ -436,8 +436,10 @@ static void eval_op_div(int op, eval_state_t *state)
 
    switch (lhs->kind) {
    case VALUE_INTEGER:
-      if (rhs->integer == 0)
-         fatal_at(tree_loc(state->fcall), "division by zero");
+      if (rhs->integer == 0) {
+         error_at(tree_loc(state->fcall), "division by zero");
+         state->failed = true;
+      }
       else {
          dst->kind    = VALUE_INTEGER;
          dst->integer = lhs->integer / rhs->integer;
@@ -462,8 +464,10 @@ static void eval_op_mod(int op, eval_state_t *state)
 
    switch (lhs->kind) {
    case VALUE_INTEGER:
-      if (rhs->integer == 0)
-         fatal_at(tree_loc(state->fcall), "division by zero");
+      if (rhs->integer == 0) {
+         error_at(tree_loc(state->fcall), "division by zero");
+         state->failed = true;
+      }
       else {
          dst->kind    = VALUE_INTEGER;
          dst->integer = labs(lhs->integer % rhs->integer);
@@ -483,8 +487,10 @@ static void eval_op_rem(int op, eval_state_t *state)
 
    switch (lhs->kind) {
    case VALUE_INTEGER:
-      if (rhs->integer == 0)
-         fatal_at(tree_loc(state->fcall), "division by zero");
+      if (rhs->integer == 0) {
+         error_at(tree_loc(state->fcall), "division by zero");
+         state->failed = true;
+      }
       else {
          dst->kind    = VALUE_INTEGER;
          dst->integer =
