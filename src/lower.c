@@ -65,11 +65,10 @@ struct case_state {
    case_arc_t    arcs[MAX_CASE_ARCS];
 };
 
-static const char  *verbose = NULL;
-static bool         tmp_alloc_used = false;
-static bool         allow_undefined = false;
-static hash_t      *vcode_objs = NULL;
-static vcode_unit_t thunk_context = NULL;
+static const char *verbose = NULL;
+static bool        tmp_alloc_used = false;
+static bool        allow_undefined = false;
+static hash_t     *vcode_objs = NULL;
 
 static vcode_reg_t lower_expr(tree_t expr, expr_ctx_t ctx);
 static vcode_reg_t lower_reify_expr(tree_t expr);
@@ -4714,15 +4713,14 @@ vcode_unit_t lower_thunk(tree_t fcall)
 {
    lower_set_verbose();
 
-   if (thunk_context == NULL)
-      thunk_context = emit_context(ident_new("thunk"));
+   vcode_unit_t context = emit_context(ident_new("thunk"));
 
-   vcode_select_unit(thunk_context);
+   vcode_select_unit(context);
    allow_undefined = true;
    tmp_alloc_used = false;
 
    vcode_type_t vtype = lower_type(tree_type(fcall));
-   vcode_unit_t thunk = emit_thunk(tree_ident(fcall), thunk_context, vtype);
+   vcode_unit_t thunk = emit_thunk(tree_ident(fcall), context, vtype);
 
    vcode_reg_t result_reg = lower_expr(fcall, EXPR_RVALUE);
    emit_return(emit_cast(vtype, vtype, result_reg));

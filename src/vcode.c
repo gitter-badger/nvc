@@ -83,33 +83,31 @@ DECLARE_AND_DEFINE_ARRAY(vcode_type);
     || x == VCODE_OP_PCALL || x == VCODE_OP_CASE                        \
     || x == VCODE_OP_NESTED_PCALL)
 
-#define OP_USE_COUNT_U0(x) \
-   (OP_HAS_CMP(x) + OP_HAS_VALUE(x) + OP_HAS_REAL(x) +                  \
-    OP_HAS_COMMENT(x) + OP_HAS_SIGNAL(x) + OP_HAS_DIM(x) +              \
-    OP_HAS_HOPS(x) + OP_HAS_FIELD(x) + OP_HAS_HINT(x) +                 \
-    OP_HAS_TAG(x))
-
 typedef struct {
    vcode_op_t          kind;
    vcode_reg_array_t   args;
    vcode_reg_t         result;
-   vcode_type_t        type;       // OP_HAS_TYPE
-   vcode_block_array_t targets;    // OP_HAS_TARGET
-   vcode_var_t         address;    // OP_HAS_ADDRESS
-   vcode_bookmark_t    bookmark;   // OP_HAS_BOOKMARK
-   ident_t             func;       // OP_HAS_FUNC
-   unsigned            subkind;    // OP_HAS_SUBKIND
+   vcode_type_t        type;         // OP_HAS_TYPE
    union {
-      vcode_cmp_t      cmp;        // OP_HAS_CMP
-      int64_t          value;      // OP_HAS_VALUE
-      double           real;       // OP_HAS_REAL
-      char            *comment;    // OP_HAS_COMMENT
-      vcode_signal_t   signal;     // OP_HAS_SIGNAL
-      unsigned         dim;        // OP_HAS_DIM
-      unsigned         hops;       // OP_HAS_HOPS
-      unsigned         field;      // OP_HAS_FIELD
-      vcode_bookmark_t hint;       // OP_HAS_HINT
-      uint32_t         tag;        // OP_HAS_TAG
+      ident_t          func;         // OP_HAS_FUNC
+      vcode_var_t      address;      // OP_HAS_ADDRESS
+      unsigned         subkind;      // OP_HAS_SUBKIND
+   };
+   union {
+      vcode_bookmark_t    bookmark;  // OP_HAS_BOOKMARK
+      vcode_block_array_t targets;   // OP_HAS_TARGET
+   };
+   union {
+      vcode_cmp_t      cmp;          // OP_HAS_CMP
+      int64_t          value;        // OP_HAS_VALUE
+      double           real;         // OP_HAS_REAL
+      char            *comment;      // OP_HAS_COMMENT
+      vcode_signal_t   signal;       // OP_HAS_SIGNAL
+      unsigned         dim;          // OP_HAS_DIM
+      unsigned         hops;         // OP_HAS_HOPS
+      unsigned         field;        // OP_HAS_FIELD
+      vcode_bookmark_t hint;         // OP_HAS_HINT
+      uint32_t         tag;          // OP_HAS_TAG
    };
 } op_t;
 
@@ -151,23 +149,31 @@ typedef struct {
    };
 } vtype_t;
 
-typedef struct {
-   vcode_type_t type;
-   vcode_type_t bounds;
-   ident_t      name;
-   bool         is_extern;
-   bool         is_const;
-   bool         use_heap;
-} var_t;
+typedef enum {
+   VAR_EXTERN = (1 << 0),
+   VAR_CONST  = (1 << 1),
+   VAR_HEAP   = (1 << 2)
+} var_flags_t;
 
 typedef struct {
    vcode_type_t type;
    vcode_type_t bounds;
    ident_t      name;
-   vcode_var_t  shadow;
-   netid_t     *nets;
-   size_t       nnets;
-   bool         is_extern;
+   var_flags_t  flags;
+} var_t;
+
+typedef enum {
+   SIGNAL_EXTERN = (1 << 0)
+} signal_flags_t;
+
+typedef struct {
+   vcode_type_t   type;
+   vcode_type_t   bounds;
+   ident_t        name;
+   vcode_var_t    shadow;
+   netid_t       *nets;
+   size_t         nnets;
+   signal_flags_t flags;
 } signal_t;
 
 typedef struct {
@@ -184,6 +190,10 @@ DECLARE_AND_DEFINE_ARRAY(block);
 DECLARE_AND_DEFINE_ARRAY(signal);
 DECLARE_AND_DEFINE_ARRAY(vtype);
 
+typedef enum {
+   UNIT_PURE = (1 << 0)
+} unit_flags_t;
+
 struct vcode_unit {
    vunit_kind_t   kind;
    vcode_unit_t   context;
@@ -196,7 +206,9 @@ struct vcode_unit {
    signal_array_t signals;
    param_array_t  params;
    unsigned       depth;
-   bool           pure;
+   unit_flags_t   flags;
+   vcode_unit_t   children;
+   vcode_unit_t   next;
 };
 
 #define MASK_CONTEXT(x)   ((x) >> 24)
@@ -218,7 +230,9 @@ struct vcode_unit {
 #define VCODE_FOR_EACH_MATCHING_OP(name, k) \
    VCODE_FOR_EACH_OP(name) if (name->kind == k)
 
-#define VCODE_MAGIC 0x76636f64
+#define VCODE_MAGIC        0x76636f64
+#define VCODE_VERSION      1
+#define VCODE_CHECK_UNIONS 0
 
 static vcode_unit_t  active_unit = NULL;
 static vcode_block_t active_block = VCODE_INVALID_BLOCK;
@@ -385,7 +399,7 @@ void vcode_heap_allocate(vcode_reg_t reg)
       break;
 
    case VCODE_OP_INDEX:
-      vcode_var_data(defn->address)->use_heap = true;
+      vcode_var_data(defn->address)->flags |= VAR_HEAP;
       break;
 
    case VCODE_OP_WRAP:
@@ -695,12 +709,12 @@ vcode_type_t vcode_var_type(vcode_var_t var)
 
 bool vcode_var_extern(vcode_var_t var)
 {
-   return vcode_var_data(var)->is_extern;
+   return !!(vcode_var_data(var)->flags & VAR_EXTERN);
 }
 
 bool vcode_var_use_heap(vcode_var_t var)
 {
-   return vcode_var_data(var)->use_heap;
+   return !!(vcode_var_data(var)->flags & VAR_HEAP);
 }
 
 int vcode_count_signals(void)
@@ -743,7 +757,7 @@ vcode_type_t vcode_signal_bounds(vcode_signal_t sig)
 
 bool vcode_signal_extern(vcode_signal_t sig)
 {
-   return vcode_signal_data(sig)->is_extern;
+   return !!(vcode_signal_data(sig)->flags & SIGNAL_EXTERN);
 }
 
 vcode_op_t vcode_get_op(int op)
@@ -1126,14 +1140,14 @@ void vcode_dump(void)
       int col = printf("  ");
       col += color_printf("$magenta$%s$$", istr(v->name));
 
-      if (v->is_extern)
+      if (v->flags & VAR_EXTERN)
          col += printf(" extern");
-      if (v->use_heap)
+      if (v->flags & VAR_HEAP)
          col += printf(" heap");
 
-      if (vu->kind == VCODE_UNIT_CONTEXT && !v->is_const)
+      if (vu->kind == VCODE_UNIT_CONTEXT && !(v->flags & VAR_CONST))
          col += printf(" mutable");
-      else if (vu->kind != VCODE_UNIT_CONTEXT && v->is_const)
+      else if (vu->kind != VCODE_UNIT_CONTEXT && (v->flags & VAR_CONST))
          col += printf(" const");
 
       vcode_dump_type(col, v->type, v->bounds);
@@ -1146,7 +1160,7 @@ void vcode_dump(void)
       for (int i = 0; i < vu->signals.count; i++) {
          const signal_t *s = &(vu->signals.items[i]);
          int col = printf("  ");
-         if (s->is_extern)
+         if (s->flags & SIGNAL_EXTERN)
             col += printf("extern ");
          col += color_printf("$white$%s$$", istr(s->name));
          vcode_dump_type(col, s->type, s->bounds);
@@ -2421,7 +2435,7 @@ ident_t vcode_unit_name(void)
 bool vcode_unit_pure(void)
 {
    assert(active_unit != NULL);
-   return active_unit->pure;
+   return active_unit->flags & UNIT_PURE;
 }
 
 int vcode_unit_depth(void)
@@ -2482,7 +2496,10 @@ vcode_unit_t emit_function(ident_t name, vcode_unit_t context,
    vu->context = context;
    vu->result  = result;
    vu->depth   = vcode_unit_calc_depth(vu);
-   vu->pure    = true;
+   vu->flags   = UNIT_PURE;
+   vu->next    = context->children;
+
+   context->children = vu;
 
    active_unit = vu;
    vcode_select_block(emit_block());
@@ -2500,6 +2517,9 @@ vcode_unit_t emit_procedure(ident_t name, vcode_unit_t context)
    vu->context = context;
    vu->result  = VCODE_INVALID_TYPE;
    vu->depth   = vcode_unit_calc_depth(vu);
+   vu->next    = context->children;
+
+   context->children = vu;
 
    active_unit = vu;
    vcode_select_block(emit_block());
@@ -2519,6 +2539,9 @@ vcode_unit_t emit_process(ident_t name, vcode_unit_t context)
    vu->context = context;
    vu->depth   = vcode_unit_calc_depth(vu);
    vu->result  = VCODE_INVALID_TYPE;
+   vu->next    = context->children;
+
+   context->children = vu;
 
    active_unit = vu;
    vcode_select_block(emit_block());
@@ -2534,6 +2557,9 @@ vcode_unit_t emit_thunk(ident_t name, vcode_unit_t context, vcode_type_t type)
    vu->context = context;
    vu->result  = type;
    vu->depth   = vcode_unit_calc_depth(vu);
+   vu->next    = context->children;
+
+   context->children = vu;
 
    active_unit = vu;
    vcode_select_block(emit_block());
@@ -2561,7 +2587,7 @@ void emit_assert(vcode_reg_t value, vcode_reg_t message, vcode_reg_t length,
    int64_t value_const;
    if (vcode_reg_const(value, &value_const)) {
       if (value_const == 0)
-         active_unit->pure = false;
+         active_unit->flags &= ~UNIT_PURE;
       else {
          emit_comment("Always true assertion on r%d", value);
          return;
@@ -2588,7 +2614,7 @@ void emit_report(vcode_reg_t message, vcode_reg_t length, vcode_reg_t severity,
    vcode_add_arg(op, length);
    op->bookmark = where;
 
-   active_unit->pure = false;
+   active_unit->flags &= ~UNIT_PURE;
 }
 
 vcode_reg_t emit_cmp(vcode_cmp_t cmp, vcode_reg_t lhs, vcode_reg_t rhs)
@@ -2874,8 +2900,7 @@ vcode_var_t emit_var(vcode_type_t type, vcode_type_t bounds, ident_t name,
    v->type     = type;
    v->bounds   = bounds;
    v->name     = name;
-   v->is_const = is_const;
-   v->use_heap = false;
+   v->flags    = is_const ? VAR_CONST : 0;
 
    return MAKE_HANDLE(active_unit->depth, var);
 }
@@ -2889,12 +2914,12 @@ vcode_var_t emit_extern_var(vcode_type_t type, vcode_type_t bounds,
    // Try to find an existing extern with this name
    for (unsigned i = 0; i < active_unit->vars.count; i++) {
       var_t *v = &(active_unit->vars.items[i]);
-      if (v->is_extern && v->name == name)
+      if ((v->flags & VAR_EXTERN) && v->name == name)
          return MAKE_HANDLE(active_unit->depth, i);
    }
 
    vcode_var_t var = emit_var(type, bounds, name, false);
-   vcode_var_data(var)->is_extern = true;
+   vcode_var_data(var)->flags |= VAR_EXTERN;
    return var;
 }
 
@@ -2945,13 +2970,13 @@ vcode_signal_t emit_extern_signal(vcode_type_t type, vcode_type_t bounds,
    // Try to find an existing extern with this name
    for (unsigned i = 0; i < active_unit->vars.count; i++) {
       signal_t *s = &(active_unit->signals.items[i]);
-      if (s->is_extern && s->name == name)
+      if ((s->flags & SIGNAL_EXTERN) && s->name == name)
          return i;
    }
 
    vcode_signal_t sig = emit_signal(type, bounds, name, VCODE_INVALID_VAR,
                                     NULL, 0);
-   vcode_signal_data(sig)->is_extern = true;
+   vcode_signal_data(sig)->flags |= SIGNAL_EXTERN;
    return sig;
 }
 
@@ -2976,7 +3001,7 @@ vcode_reg_t emit_load(vcode_var_t var)
    var_t *v = vcode_var_data(var);
 
    if (fold != VCODE_INVALID_REG && !aliased
-       && (v->is_const || MASK_CONTEXT(var) == active_unit->depth))
+       && ((v->flags & VAR_CONST) || MASK_CONTEXT(var) == active_unit->depth))
       return fold;
 
    op_t *op = vcode_add_op(VCODE_OP_LOAD);
@@ -4063,7 +4088,7 @@ void emit_file_write(vcode_reg_t file, vcode_reg_t value, vcode_reg_t length)
    VCODE_ASSERT(vtype_is_pointer(vcode_reg_type(file), VCODE_TYPE_FILE),
                 "file write first argument must have file pointer type");
 
-   active_unit->pure = false;
+   active_unit->flags &= ~UNIT_PURE;
 }
 
 void emit_file_close(vcode_reg_t file)
@@ -4095,7 +4120,7 @@ void emit_file_read(vcode_reg_t file, vcode_reg_t ptr,
                 || vtype_kind(vcode_reg_type(outlen)) == VCODE_TYPE_POINTER,
                 "file read outlen argument must have pointer type");
 
-   active_unit->pure = false;
+   active_unit->flags &= ~UNIT_PURE;
 }
 
 vcode_reg_t emit_null(vcode_type_t type)
@@ -4433,17 +4458,13 @@ vcode_reg_t emit_undefined(vcode_type_t type)
    return (op->result = vcode_add_reg(type));
 }
 
-void vcode_write(vcode_unit_t unit, fbuf_t *fbuf)
+static void vcode_write_unit(vcode_unit_t unit, fbuf_t *fbuf,
+                             ident_wr_ctx_t ident_wr_ctx)
 {
-   assert(unit->kind = VCODE_UNIT_CONTEXT);
-
-   write_u32(VCODE_MAGIC, fbuf);
-
-   ident_wr_ctx_t ident_wr_ctx = ident_write_begin(fbuf);
-
    write_u8(unit->kind, fbuf);
    ident_write(unit->name, ident_wr_ctx);
    write_u32(unit->result, fbuf);
+   write_u32(unit->flags, fbuf);
 
    write_u32(unit->blocks.count, fbuf);
    for (unsigned i = 0; i < unit->blocks.count; i++) {
@@ -4452,8 +4473,6 @@ void vcode_write(vcode_unit_t unit, fbuf_t *fbuf)
 
       for (unsigned j = 0; j < b->ops.count; j++) {
          const op_t *op = &(b->ops.items[j]);
-
-         assert(OP_USE_COUNT_U0(op->kind) <= 1);
 
          write_u8(op->kind, fbuf);
          write_u32(op->result, fbuf);
@@ -4508,5 +4527,98 @@ void vcode_write(vcode_unit_t unit, fbuf_t *fbuf)
       write_u32(r->bounds, fbuf);
    }
 
+   write_u32(unit->types.count, fbuf);
+   for (unsigned i = 0; i < unit->types.count; i++) {
+      const vtype_t *t = &(unit->types.items[i]);
+      write_u8(t->kind, fbuf);
+      switch (t->kind) {
+      case VCODE_TYPE_INT:
+      case VCODE_TYPE_OFFSET:
+         write_u64(t->low, fbuf);
+         write_u64(t->high, fbuf);
+         break;
+
+      case VCODE_TYPE_REAL:
+         write_double(t->rlow, fbuf);
+         write_double(t->rhigh, fbuf);
+         break;
+
+      case VCODE_TYPE_CARRAY:
+      case VCODE_TYPE_UARRAY:
+         write_u8(t->dims, fbuf);
+         write_u32(t->size, fbuf);
+         write_u32(t->elem, fbuf);
+         write_u32(t->bounds, fbuf);
+         break;
+
+      case VCODE_TYPE_ACCESS:
+      case VCODE_TYPE_POINTER:
+         write_u32(t->pointed, fbuf);
+         break;
+
+      case VCODE_TYPE_FILE:
+      case VCODE_TYPE_SIGNAL:
+         write_u32(t->base, fbuf);
+         break;
+
+      case VCODE_TYPE_RECORD:
+         ident_write(t->name, ident_wr_ctx);
+         write_u32(t->index, fbuf);
+         write_u32(t->fields.count, fbuf);
+         for (unsigned j = 0; j < t->fields.count; j++)
+            write_u32(t->fields.items[j], fbuf);
+         break;
+      }
+   }
+
+   write_u32(unit->params.count, fbuf);
+   for (unsigned i = 0; i < unit->params.count; i++) {
+      const param_t *p = &(unit->params.items[i]);
+      write_u32(p->type, fbuf);
+      write_u32(p->bounds, fbuf);
+      ident_write(p->name, ident_wr_ctx);
+      write_u32(p->reg, fbuf);
+   }
+
+   if (unit->next != NULL)
+      vcode_write_unit(unit->next, fbuf, ident_wr_ctx);
+
+   if (unit->children != NULL)
+      vcode_write_unit(unit->children, fbuf, ident_wr_ctx);
+}
+
+void vcode_write(vcode_unit_t unit, fbuf_t *fbuf)
+{
+   assert(unit->kind = VCODE_UNIT_CONTEXT);
+
+   write_u32(VCODE_MAGIC, fbuf);
+   write_u8(VCODE_VERSION, fbuf);
+
+   ident_wr_ctx_t ident_wr_ctx = ident_write_begin(fbuf);
+   vcode_write_unit(unit, fbuf, ident_wr_ctx);
+   write_u8(0xff, fbuf);  // End marker
    ident_write_end(ident_wr_ctx);
 }
+
+#if VCODE_CHECK_UNIONS
+#define OP_USE_COUNT_U0(x)                                              \
+   (OP_HAS_CMP(x) + OP_HAS_VALUE(x) + OP_HAS_REAL(x) +                  \
+    OP_HAS_COMMENT(x) + OP_HAS_SIGNAL(x) + OP_HAS_DIM(x) +              \
+    OP_HAS_HOPS(x) + OP_HAS_FIELD(x) + OP_HAS_HINT(x) +                 \
+    OP_HAS_TAG(x))
+#define OP_USE_COUNT_U1(x)                                              \
+   (OP_HAS_SUBKIND(x) + OP_HAS_FUNC(x) + OP_HAS_ADDRESS(x))
+#define OP_USE_COUNT_U2(x)                                              \
+   (OP_HAS_BOOKMARK(x) + OP_HAS_TARGET(x))
+
+__attribute__((constructor))
+static void vcode_check_unions(void)
+{
+   printf("sizeof(op_t) = %ld\n", sizeof(op_t));
+   for (int i = 0; i < 256; i++) {
+      assert(OP_USE_COUNT_U0(i) <= 1);
+      assert(OP_USE_COUNT_U1(i) <= 1);
+      assert(OP_USE_COUNT_U2(i) <= 1);
+   }
+}
+#endif  // VCODE_CHECK_UNIONS
