@@ -2764,8 +2764,13 @@ static void lower_assert(tree_t stmt)
    vcode_reg_t severity = lower_reify_expr(tree_severity(stmt));
 
    vcode_reg_t value = VCODE_INVALID_REG;
-   if (!is_report)
+   if (!is_report) {
       value = lower_reify_expr(tree_value(stmt));
+
+      int64_t value_const;
+      if (vcode_reg_const(value, &value_const) && value_const)
+         return;
+   }
 
    vcode_block_t message_bb = VCODE_INVALID_BLOCK;
    vcode_block_t exit_bb = VCODE_INVALID_BLOCK;

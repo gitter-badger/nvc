@@ -2504,6 +2504,24 @@ START_TEST(test_real1)
 }
 END_TEST
 
+START_TEST(test_assert1)
+{
+   input_from_file(TESTDIR "/lower/assert1.vhd");
+
+   tree_t e = run_elab();
+   lower_unit(e);
+
+   vcode_unit_t v0 = tree_code(tree_stmt(e, 0));
+   vcode_select_unit(v0);
+
+   EXPECT_BB(1) = {
+      { VCODE_OP_WAIT, .target = 2 }
+   };
+
+   CHECK_BB(1);
+}
+END_TEST
+
 int main(void)
 {
    Suite *s = suite_create("lower");
@@ -2562,6 +2580,7 @@ int main(void)
    tcase_add_test(tc, test_tag);
    tcase_add_test(tc, test_iffold);
    tcase_add_test(tc, test_real1);
+   tcase_add_test(tc, test_assert1);
    suite_add_tcase(s, tc);
 
    return nvc_run_test(s);

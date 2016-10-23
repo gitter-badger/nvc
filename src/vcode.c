@@ -607,6 +607,11 @@ void vcode_opt(void)
             case VCODE_OP_HEAP_SAVE:
             case VCODE_OP_EXP:
             case VCODE_OP_UNDEFINED:
+            case VCODE_OP_UARRAY_LEN:
+            case VCODE_OP_UARRAY_DIR:
+            case VCODE_OP_UARRAY_LEFT:
+            case VCODE_OP_UARRAY_RIGHT:
+            case VCODE_OP_UNWRAP:
                if (uses[o->result] == -1) {
                   vcode_dump();
                   fatal("defintion of r%d does not dominate all uses",
