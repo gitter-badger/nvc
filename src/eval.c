@@ -712,7 +712,7 @@ static void eval_op_fcall(int op, eval_state_t *state)
 
    if (new.failed)
       state->failed = true;
-   else {
+   else if (vcode_get_result(op) != VCODE_INVALID_REG) {
       assert(new.result != -1);
       value_t *dst = eval_get_reg(vcode_get_result(op), state);
       *dst = context->regs[new.result];
@@ -994,11 +994,9 @@ static void eval_op_index(int op, eval_state_t *state)
    if (value == NULL)
       return;
 
-   assert(value->kind == VALUE_CARRAY);
-
    value_t *dst = eval_get_reg(vcode_get_result(op), state);
    dst->kind = VALUE_POINTER;
-   dst->pointer = value->pointer;
+   dst->pointer = (value->kind == VALUE_CARRAY) ? value->pointer : value;
 }
 
 static void eval_op_load_indirect(int op, eval_state_t *state)

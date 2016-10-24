@@ -142,6 +142,20 @@ architecture a of ffold is
     begin
         return x'left + x'right;
     end function;
+
+    procedure p5(x : in integer; y : out integer) is
+        variable k : integer := x + 1;
+    begin
+        y := k;
+    end procedure;
+
+    function call_proc(x : in integer) return integer is
+        variable y : integer;
+    begin
+        p5(x, y);
+        return y;
+    end function;
+
 begin
 
     b1: block is
@@ -166,6 +180,7 @@ begin
         signal s18 : boolean := get_string(1 fs) = "1 FS";
         signal s19 : integer := needs_heap(40);
         signal s20 : integer := sum_left_right("101010");
+        signal s21 : integer := call_proc(1);
     begin
     end block;
 
