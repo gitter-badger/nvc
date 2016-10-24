@@ -323,15 +323,15 @@ static vcode_type_t lower_array_type(type_t type)
       return vtype_uarray(array_dimension(type), elem_type, elem_bounds);
 }
 
-static uint32_t lower_record_index(type_t type)
+static vcode_bookmark_t lower_record_bookmark(type_t type)
 {
    // If a record type is not qualified with a package name then add a unique
    // index to its type name to avoid collisions
+   vcode_bookmark_t uniq = { .type = NULL };
    ident_t name = type_ident(type);
    if (ident_until(name, '.') == name && type_has_index(type))
-      return type_index(type);
-   else
-      return UINT32_MAX;
+      uniq.type = type;
+   return uniq;
 }
 
 static vcode_type_t lower_type(type_t type)
@@ -365,10 +365,10 @@ static vcode_type_t lower_type(type_t type)
    case T_RECORD:
       {
          ident_t name = type_ident(type);
-         const uint32_t index = lower_record_index(type);
-         vcode_type_t record = vtype_named_record(name, index, false);
+         vcode_bookmark_t uniq = lower_record_bookmark(type);
+         vcode_type_t record = vtype_named_record(name, uniq, false);
          if (record == VCODE_INVALID_TYPE) {
-            record = vtype_named_record(name, index, true);
+            record = vtype_named_record(name, uniq, true);
 
             const int nfields = type_fields(type);
             vcode_type_t fields[nfields];
@@ -384,10 +384,10 @@ static vcode_type_t lower_type(type_t type)
    case T_PROTECTED:
       {
          ident_t name = type_ident(type);
-         uint32_t index = lower_record_index(type);
-         vcode_type_t record = vtype_named_record(name, index, false);
+         vcode_bookmark_t uniq = lower_record_bookmark(type);
+         vcode_type_t record = vtype_named_record(name, uniq, false);
          if (record == VCODE_INVALID_TYPE) {
-            record = vtype_named_record(name, index, true);
+            record = vtype_named_record(name, uniq, true);
 
             tree_t body = type_body(type);
 

@@ -168,8 +168,9 @@ typedef struct {
    vcode_block_t block;
 } vcode_state_t;
 
-typedef struct {
+typedef union {
    tree_t tree;
+   type_t type;
 } vcode_bookmark_t;
 
 #define VCODE_INVALID_REG    -1
@@ -189,7 +190,8 @@ vcode_type_t vtype_signal(vcode_type_t base);
 vcode_type_t vtype_offset(void);
 vcode_type_t vtype_time(void);
 vcode_type_t vtype_char(void);
-vcode_type_t vtype_named_record(ident_t name, uint32_t index, bool create);
+vcode_type_t vtype_named_record(ident_t name, vcode_bookmark_t uniq,
+                                bool create);
 void vtype_set_record_fields(vcode_type_t type,
                              const vcode_type_t *field_types, int nfields);
 vcode_type_t vtype_file(vcode_type_t base);

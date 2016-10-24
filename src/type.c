@@ -766,3 +766,8 @@ unsigned type_width(type_t type)
    else
       return 1;
 }
+
+type_t type_read_recall(tree_rd_ctx_t ctx, uint32_t index)
+{
+   return (type_t)object_read_recall((object_rd_ctx_t *)ctx, index);
+}

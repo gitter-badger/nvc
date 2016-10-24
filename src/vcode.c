@@ -143,7 +143,7 @@ typedef struct {
       vcode_type_t base;
       struct {
          ident_t            name;
-         uint32_t           index;
+         vcode_bookmark_t   uniq;
          vcode_type_array_t fields;
       };
    };
@@ -1123,8 +1123,9 @@ void vcode_dump(void)
       const vtype_t *t = &(vu->types.items[i]);
       if (t->kind == VCODE_TYPE_RECORD) {
          int col = 0;
-         if (t->index != UINT32_MAX)
-            col += color_printf("  $magenta$%s.%u$$", istr(t->name), t->index);
+         if (t->uniq.type != NULL && type_has_index(t->uniq.type))
+            col += color_printf("  $magenta$%s.%u$$", istr(t->name),
+                                type_index(t->uniq.type));
          else
             col += color_printf("  $magenta$%s$$", istr(t->name));
          vcode_dump_tab(col, 40);
@@ -2047,7 +2048,7 @@ bool vtype_eq(vcode_type_t a, vcode_type_t b)
       case VCODE_TYPE_FILE:
          return vtype_eq(at->base, bt->base);
       case VCODE_TYPE_RECORD:
-         return at->name == bt->name && at->index == bt->index;
+         return at->name == bt->name && at->uniq.type == bt->uniq.type;
       }
 
       return false;
@@ -2140,23 +2141,23 @@ vcode_type_t vtype_carray(int size, vcode_type_t elem, vcode_type_t bounds)
    return vtype_new(n);
 }
 
-vcode_type_t vtype_named_record(ident_t name, uint32_t index, bool create)
+vcode_type_t vtype_named_record(ident_t name, vcode_bookmark_t uniq, bool create)
 {
    assert(active_unit != NULL);
 
    for (int i = 0; i < active_unit->types.count; i++) {
       vtype_t *other = &(active_unit->types.items[i]);
       if (other->kind == VCODE_TYPE_RECORD && other->name == name
-          && other->index == index)
+          && other->uniq.type == uniq.type)
          return MAKE_HANDLE(active_unit->depth, i);
    }
 
    if (create) {
       vtype_t *n = vtype_array_alloc(&(active_unit->types));
       memset(n, '\0', sizeof(vtype_t));
-      n->kind  = VCODE_TYPE_RECORD;
-      n->name  = name;
-      n->index = index;
+      n->kind = VCODE_TYPE_RECORD;
+      n->name = name;
+      n->uniq = uniq;
 
       return vtype_new(n);
    }
@@ -2332,8 +2333,8 @@ char *vtype_record_name(vcode_type_t type)
 {
    vtype_t *vt = vcode_type_data(type);
    assert(vt->kind == VCODE_TYPE_RECORD);
-   if (vt->index != UINT32_MAX)
-      return xasprintf("%s.%u", istr(vt->name), vt->index);
+   if (vt->uniq.type != NULL && type_has_index(vt->uniq.type))
+      return xasprintf("%s.%u", istr(vt->name), type_index(vt->uniq.type));
    else
       return xasprintf("%s", istr(vt->name));
 }
@@ -4576,7 +4577,10 @@ static void vcode_write_unit(vcode_unit_t unit, fbuf_t *f,
 
       case VCODE_TYPE_RECORD:
          ident_write(t->name, ident_wr_ctx);
-         write_u32(t->index, f);
+         if (t->uniq.type)
+            write_u32(type_index(t->uniq.type), f);
+         else
+            write_u32(0, f);
          write_u32(t->fields.count, f);
          for (unsigned j = 0; j < t->fields.count; j++)
             write_u32(t->fields.items[j], f);
@@ -4754,12 +4758,18 @@ static bool vcode_read_unit(fbuf_t *f, tree_rd_ctx_t tree_ctx,
          break;
 
       case VCODE_TYPE_RECORD:
-         t->name = ident_read(ident_rd_ctx);
-         t->index = read_u32(f);
-         vcode_type_array_resize(&(t->fields), read_u32(f), 0);
-         for (unsigned j = 0; j < t->fields.count; j++)
-            t->fields.items[j] = read_u32(f);
-         break;
+         {
+            t->name = ident_read(ident_rd_ctx);
+            const uint32_t index = read_u32(f);
+            if (index != 0)
+               t->uniq.type = type_read_recall(tree_ctx, index);
+            else
+               t->uniq.type = NULL;
+            vcode_type_array_resize(&(t->fields), read_u32(f), 0);
+            for (unsigned j = 0; j < t->fields.count; j++)
+               t->fields.items[j] = read_u32(f);
+            break;
+         }
       }
    }
 
