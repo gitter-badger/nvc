@@ -2515,6 +2515,8 @@ START_TEST(test_assert1)
    vcode_select_unit(v0);
 
    EXPECT_BB(1) = {
+      { VCODE_OP_CONST, .value = 1 },
+      { VCODE_OP_STORE, .name = "B" },
       { VCODE_OP_WAIT, .target = 2 }
    };
 

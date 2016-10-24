@@ -1667,6 +1667,7 @@ tree_t elab(tree_t top)
    if (opt_get_int("cover"))
       cover_tag(e);
 
+   simplify(e);
    bounds_check(e);
 
    for (generic_list_t *it = generic_override; it != NULL; it = it->next) {

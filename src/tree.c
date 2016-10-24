@@ -885,7 +885,7 @@ void tree_change_net(tree_t t, unsigned n, netid_t i)
    item_t *item = lookup_item(&tree_object, t, I_NETS);
 
    if (n >= item->netid_array.count)
-      netid_array_resize(&(item->netid_array), n + 1, NETID_INVALID);
+      netid_array_resize(&(item->netid_array), n + 1, 0xff);
 
    item->netid_array.items[n] = i;
 }

@@ -858,6 +858,19 @@ static tree_t simp_context_ref(tree_t t, simp_ctx_t *ctx)
    return NULL;
 }
 
+static tree_t simp_assert(tree_t t)
+{
+   bool value_b;
+   if (!tree_has_value(t))
+      return t;
+   else if (folded_bool(tree_value(t), &value_b) && value_b) {
+      // Assertion always passes
+      return NULL;
+   }
+   else
+      return t;
+}
+
 static tree_t simp_tree(tree_t t, void *_ctx)
 {
    simp_ctx_t *ctx = _ctx;
@@ -901,6 +914,8 @@ static tree_t simp_tree(tree_t t, void *_ctx)
       return simp_record_ref(t);
    case T_CTXREF:
       return simp_context_ref(t, ctx);
+   case T_ASSERT:
+      return simp_assert(t);
    default:
       return t;
    }
